@@ -3,6 +3,7 @@ import { Server as HttpServer } from 'http';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import prisma from './db';
+import { isAllowedOrigin } from './utils/allowedOrigins';
 
 let io: SocketIOServer;
 
@@ -14,12 +15,9 @@ export const initSocket = (server: HttpServer) => {
       threshold: 512,                   // Only compress frames > 512 bytes
     },
     cors: {
-      // Mirror the same LAN whitelist used by HTTP CORS — never allow open wildcard in prod
       origin: (origin, callback) => {
-        const isLAN =
-          !origin ||
-          /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.|172\.|10\.)/.test(origin);
-        callback(isLAN ? null : new Error('Socket CORS: origin not allowed'), isLAN);
+        const ok = isAllowedOrigin(origin);
+        callback(ok ? null : new Error('Socket CORS: origin not allowed'), ok);
       },
       methods: ['GET', 'POST'],
       credentials: true,

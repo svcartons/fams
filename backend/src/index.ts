@@ -20,6 +20,7 @@ import { initBackupScheduler } from './utils/backup';
 import { initMaintenanceSchedulers } from './utils/maintenance';
 import { rateLimitMiddleware } from './middleware/rateLimitMiddleware';
 import { ensureKioskTokenSetting } from './utils/ensureKioskToken';
+import { isAllowedOrigin } from './utils/allowedOrigins';
 
 const app = express();
 const httpServer = createServer(app);
@@ -63,26 +64,7 @@ app.use(compression({
 }));
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests from localhost, factory LAN, and no-origin (server-to-server)
-    const allowed = [
-      'http://localhost',
-      'http://localhost:8080',
-      'http://localhost:3000',
-      'http://localhost:5173',
-      'http://127.0.0.1',
-      'http://127.0.0.1:8080',
-      'http://127.0.0.1:3000',
-      'http://127.0.0.1:5173',
-      'capacitor://localhost'
-    ];
-    // Allow any 192.168.x.x, 172.x.x.x, 10.x.x.x LAN IP, localhost loopbacks, or capacitor:// scheme
-    const isLAN = !origin || allowed.includes(origin) ||
-      /^(https?|capacitor):\/\/(192\.168\.|172\.|10\.|localhost|127\.0\.0\.1)/.test(origin) ||
-      origin.startsWith('capacitor://') ||
-      origin === 'http://localhost' ||
-      origin === 'https://localhost';
-
-    if (isLAN) {
+    if (isAllowedOrigin(origin)) {
       callback(null, true);
     } else {
       console.warn(`[CORS Blocked] Origin: ${origin}`);
