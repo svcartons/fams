@@ -21,6 +21,8 @@ export function ensureKioskToken(storedToken?: string | null): boolean {
 /**
  * Auto-pair browser kiosk from the LAN/local bootstrap endpoint when
  * localStorage has no token yet (typical fresh local/dev session).
+ * Public-internet phones cannot use this (403 in production); they unlock
+ * via Google on /kiosk instead (see KioskMode + POST /auth/kiosk-google).
  */
 export async function bootstrapKioskToken(): Promise<boolean> {
   if (ensureKioskToken()) return true;

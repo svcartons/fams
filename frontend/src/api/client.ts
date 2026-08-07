@@ -62,6 +62,13 @@ export const googleLogin = (credential: string) =>
     body: JSON.stringify({ credential }),
   });
 
+/** Unlock a remote PWA/phone kiosk with an authorized Google admin account. */
+export const kioskGooglePair = (credential: string) =>
+  fetchJson<{ token: string }>('/auth/kiosk-google', {
+    method: 'POST',
+    body: JSON.stringify({ credential }),
+  });
+
 export const getGoogleClientId = () =>
   fetchJson<{ clientId: string | null }>('/auth/google-client-id');
 

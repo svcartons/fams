@@ -7,6 +7,7 @@ import { authenticateToken, clearSessionCookie, setSessionCookie } from '../midd
 import { getIp } from '../utils/helpers';
 import { sendWebhookNotification } from '../utils/notifications';
 import { generateTotpSecret, verifyTotp } from '../utils/totp';
+import { ensureKioskTokenSetting } from '../utils/ensureKioskToken';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'fams-development-only-secret-change-me';
@@ -267,6 +268,79 @@ router.post('/google', async (req: Request, res: Response) => {
     return issueAuthResponse(res, user);
   } catch (err: any) {
     console.error('[Google Auth]', err?.message || err);
+    return res.status(401).json({ error: 'Google Sign-In failed' });
+  }
+});
+
+// POST /api/auth/kiosk-google — unlock a phone/PWA kiosk with an authorized Google admin.
+// Returns the shared device token only (no admin browser session).
+router.post('/kiosk-google', async (req: Request, res: Response) => {
+  try {
+    if (!googleClient || !GOOGLE_CLIENT_ID) {
+      return res.status(503).json({
+        error: 'Google Sign-In not configured. Add GOOGLE_CLIENT_ID to the backend environment.',
+      });
+    }
+
+    const { credential } = req.body || {};
+    if (!credential || typeof credential !== 'string') {
+      return res.status(400).json({ error: 'Google credential required' });
+    }
+
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    if (!payload?.sub || !payload.email) {
+      return res.status(401).json({ error: 'Invalid Google token' });
+    }
+    if (payload.email_verified !== true) {
+      return res.status(403).json({ error: 'Google email is not verified' });
+    }
+
+    const email = payload.email.toLowerCase();
+    const googleId = payload.sub;
+    const isAdminEmail = email === ADMIN_GOOGLE_EMAIL;
+
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [{ googleId }, { email }],
+      },
+      select: { id: true, username: true, role: true, email: true },
+    });
+
+    const authorized = isAdminEmail || user?.role === 'admin';
+    if (!authorized) {
+      await prisma.auditLog.create({
+        data: {
+          actor: email,
+          action: 'Kiosk Unlock Denied',
+          target: 'Kiosk',
+          details: 'Unauthorized Google account attempted to unlock kiosk',
+          ipAddress: getIp(req),
+        },
+      }).catch(() => {});
+      return res.status(403).json({
+        error: 'This Google account is not authorized to unlock the kiosk',
+      });
+    }
+
+    const token = await ensureKioskTokenSetting();
+
+    await prisma.auditLog.create({
+      data: {
+        actor: user?.username || email,
+        action: 'Kiosk Unlocked via Google',
+        target: 'Kiosk',
+        details: `Device unlocked by ${email}`,
+        ipAddress: getIp(req),
+      },
+    }).catch(() => {});
+
+    return res.json({ token });
+  } catch (err: any) {
+    console.error('[Kiosk Google]', err?.message || err);
     return res.status(401).json({ error: 'Google Sign-In failed' });
   }
 });

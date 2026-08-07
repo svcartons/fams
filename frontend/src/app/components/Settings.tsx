@@ -1893,6 +1893,13 @@ function SecuritySection({
           description="Shared secret for web kiosk and attendance terminals."
         />
         <div className="fams-settings-card-body space-y-4">
+          <p className="text-sm text-[var(--muted)] leading-relaxed">
+            To unlock a phone kiosk on the public internet, open{" "}
+            <span className="font-medium text-[var(--text)]">/kiosk</span> on
+            the device and sign in once with the admin Google account. Factory
+            LAN devices can still auto-pair. Regenerating the token forces all
+            devices to unlock again.
+          </p>
           <div className="space-y-1.5">
             <label className="fams-settings-label">Current Kiosk Token</label>
             <input
