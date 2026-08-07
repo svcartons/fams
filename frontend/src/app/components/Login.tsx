@@ -68,7 +68,6 @@ export function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [googleClientId, setGoogleClientId] = useState<string | null>(null);
   const [googleConfigError, setGoogleConfigError] = useState<string | null>(null);
   const googleBtnRef = useRef<HTMLDivElement>(null);
   const { login } = useAuth();
@@ -109,7 +108,6 @@ export function Login() {
           setShowPasswordForm(true);
           return;
         }
-        setGoogleClientId(clientId);
         await loadGoogleScript();
         if (cancelled || !window.google?.accounts?.id || !googleBtnRef.current) return;
 
@@ -200,11 +198,6 @@ export function Login() {
           />
           {googleLoading && (
             <p className="fams-auth-google-status">Signing you in…</p>
-          )}
-          {googleClientId && !googleLoading && (
-            <p className="fams-auth-google-hint">
-              Use <strong>cvjayanth005@gmail.com</strong> for admin access.
-            </p>
           )}
         </div>
 

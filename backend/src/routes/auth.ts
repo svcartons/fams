@@ -12,7 +12,12 @@ import { ensureKioskTokenSetting } from '../utils/ensureKioskToken';
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'fams-development-only-secret-change-me';
 const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || '').trim();
-const ADMIN_GOOGLE_EMAIL = (process.env.ADMIN_GOOGLE_EMAIL || 'cvjayanth005@gmail.com').trim().toLowerCase();
+const ADMIN_GOOGLE_EMAILS = new Set(
+  (process.env.ADMIN_GOOGLE_EMAIL || 'cvjayanth005@gmail.com')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean)
+);
 const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 
 type AuthUserPayload = {
@@ -196,7 +201,7 @@ router.post('/google', async (req: Request, res: Response) => {
     const googleId = payload.sub;
     const displayName = payload.name || email.split('@')[0];
     const picture = payload.picture || null;
-    const isAdminEmail = email === ADMIN_GOOGLE_EMAIL;
+    const isAdminEmail = ADMIN_GOOGLE_EMAILS.has(email);
 
     let user = await prisma.user.findFirst({
       where: {
@@ -205,10 +210,15 @@ router.post('/google', async (req: Request, res: Response) => {
     });
 
     if (isAdminEmail) {
-      // Prefer linking an existing admin (e.g. "Jayanth") so the account is not duplicated
+      // Prefer linking an existing admin with no Google id and matching/empty email
+      // so the first designated Google admin is not duplicated — never claim another admin.
       if (!user) {
         const unlinkableAdmin = await prisma.user.findFirst({
-          where: { role: 'admin', googleId: null },
+          where: {
+            role: 'admin',
+            googleId: null,
+            OR: [{ email: null }, { email }],
+          },
           orderBy: { createdAt: 'asc' },
         });
         if (unlinkableAdmin) {
@@ -301,7 +311,7 @@ router.post('/kiosk-google', async (req: Request, res: Response) => {
 
     const email = payload.email.toLowerCase();
     const googleId = payload.sub;
-    const isAdminEmail = email === ADMIN_GOOGLE_EMAIL;
+    const isAdminEmail = ADMIN_GOOGLE_EMAILS.has(email);
 
     const user = await prisma.user.findFirst({
       where: {

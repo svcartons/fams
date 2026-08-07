@@ -13,6 +13,9 @@ services:
       - DATABASE_URL=postgresql://fams_user:${POSTGRES_PASSWORD}@postgres:5432/fams_db?schema=public&connection_limit=5&pool_timeout=20
       - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET to a random value of at least 32 characters}
       - BIOMETRIC_ENCRYPTION_KEY=${BIOMETRIC_ENCRYPTION_KEY:?Set BIOMETRIC_ENCRYPTION_KEY to a random value}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      # Comma-separated Google emails allowed as admin (never expose these in the UI)
+      - ADMIN_GOOGLE_EMAIL=${ADMIN_GOOGLE_EMAIL:-}
       # Cap V8 old-space heap at 256 MB — forces GC before system OOM kills the process
       - NODE_OPTIONS=--max-old-space-size=256
 

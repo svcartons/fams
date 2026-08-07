@@ -41,9 +41,25 @@
 
 ## 🔐 Required Secrets
 
-Set `JWT_SECRET` and `POSTGRES_PASSWORD` in the environment before starting.
-Also set `BIOMETRIC_ENCRYPTION_KEY` when face recognition is enabled.
-All must be long, random values; the application refuses production startup without the required secrets.
+Create a `.env` file in the same folder as `docker-compose.yml` (or export these in your shell) before starting:
+
+```env
+POSTGRES_PASSWORD=replace-with-a-long-random-password
+JWT_SECRET=replace-with-at-least-32-random-characters
+BIOMETRIC_ENCRYPTION_KEY=replace-with-a-long-random-key
+GOOGLE_CLIENT_ID=your-google-oauth-web-client-id
+ADMIN_GOOGLE_EMAIL=admin1@gmail.com,admin2@gmail.com
+```
+
+`ADMIN_GOOGLE_EMAIL` is a comma-separated allowlist of Google accounts that may sign in as admin. These emails are **not** shown on the login page.
+
+After changing `.env`, restart:
+
+```
+docker compose up -d
+```
+
+(or `docker compose up --build -d` if you also changed app code)
 
 ---
 
