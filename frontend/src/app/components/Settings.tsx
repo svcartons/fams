@@ -1383,6 +1383,9 @@ function AIKioskSection({
                   },
                 ]}
               />
+              <p className="fams-settings-hint">
+                Used by the web kiosk face detector on /kiosk.
+              </p>
             </div>
             <div className="space-y-1.5">
               <label className="fams-settings-label">
@@ -1396,23 +1399,16 @@ function AIKioskSection({
             </div>
             <div className="space-y-1.5">
               <label className="fams-settings-label">
-                Model Auto-Retry Scans
+                Attendance Post Retries
               </label>
               <NumberInput
                 value={settings.ai_auto_retry || "3"}
                 onChange={(v) => onSettingChange("ai_auto_retry", v)}
                 suffix="retries"
               />
-            </div>
-            <div className="space-y-1.5">
-              <label className="fams-settings-label">
-                Neural Network RAM Cache
-              </label>
-              <NumberInput
-                value={settings.ai_model_cache_mb || "128"}
-                onChange={(v) => onSettingChange("ai_model_cache_mb", v)}
-                suffix="MB"
-              />
+              <p className="fams-settings-hint">
+                Retries a failed punch before queuing (if offline mode) or showing an error.
+              </p>
             </div>
           </div>
 
@@ -1425,32 +1421,15 @@ function AIKioskSection({
         <div className="border-t border-[var(--border)]">
           <ToggleRow
             title="68-Point Facial Landmarks"
-            description="Track detailed contours for robust spatial mapping (+40ms latency)."
-            checked={settings.ai_landmarks === "true"}
+            description="Align faces with landmark points before matching (recommended for accurate recognition)."
+            checked={settings.ai_landmarks !== "false"}
             onChange={(v) =>
               onSettingChange("ai_landmarks", v ? "true" : "false")
             }
           />
           <ToggleRow
-            title="True Liveness Verification"
-            description="Force blinking verification to stop card-spoofing bypass loops."
-            checked={settings.ai_liveness === "true"}
-            onChange={(v) =>
-              onSettingChange("ai_liveness", v ? "true" : "false")
-            }
-            tag={{ label: "Sensitive", color: "amber" }}
-          />
-          <ToggleRow
-            title="RFID Device Backup Support"
-            description="Permit RFID scanning fallback options on camera timeout failure."
-            checked={settings.ai_rfid_fallback === "true"}
-            onChange={(v) =>
-              onSettingChange("ai_rfid_fallback", v ? "true" : "false")
-            }
-          />
-          <ToggleRow
             title="Multi-Face Presence Alarms"
-            description="Trigger security flags when multiple candidates occupy camera frames."
+            description="Ignore punches when more than one face is in frame and show a one-person warning."
             checked={settings.ai_multiface_alert === "true"}
             onChange={(v) =>
               onSettingChange("ai_multiface_alert", v ? "true" : "false")
@@ -1489,20 +1468,15 @@ function AIKioskSection({
               onChange={(v) => onSettingChange("kiosk_idle_timeout", v)}
               suffix="secs"
             />
+            <p className="fams-settings-hint">
+              Stops the camera after this many seconds without a face; tap to resume.
+            </p>
           </div>
         </div>
         <div className="border-t border-[var(--border)]">
           <ToggleRow
-            title="Near-Infrared Night Mode"
-            description="Automatically toggle IR light for low-light factory floor environments."
-            checked={settings.kiosk_ir_mode === "true"}
-            onChange={(v) =>
-              onSettingChange("kiosk_ir_mode", v ? "true" : "false")
-            }
-          />
-          <ToggleRow
             title="Cached Offline Scan Capability"
-            description="Retain key roster lists in client memory if networks disconnect."
+            description="Queue punches on this tablet when the network drops, then sync with bulk-sync when back online."
             checked={settings.kiosk_offline_mode === "true"}
             onChange={(v) =>
               onSettingChange("kiosk_offline_mode", v ? "true" : "false")
@@ -1746,7 +1720,7 @@ function SecuritySection({
       const res = await regenerateKioskToken();
       onSettingChange("sec_kiosk_token", res.token);
       localStorage.setItem("fams_kiosk_token", res.token);
-      toast.success("Kiosk token regenerated");
+      toast.success("Kiosk token regenerated — other tablets must unlock again");
     } catch (err: any) {
       toast.error(err.message || "Failed to regenerate token");
     }
@@ -1890,13 +1864,13 @@ function SecuritySection({
       <Card>
         <CardHeader
           title="Kiosk Device Token"
-          description="Shared secret for web kiosk and attendance terminals."
+          description="Shared secret for web kiosks. Regenerating invalidates every paired tablet until they unlock again."
         />
         <div className="fams-settings-card-body space-y-4">
           <p className="text-sm text-[var(--muted)] leading-relaxed">
             To unlock a phone kiosk on the public internet, open{" "}
             <span className="font-medium text-[var(--text)]">/kiosk</span> on
-            the device and sign in once with the admin Google account. Factory
+            the device and sign in once with an authorized admin Google account. Factory
             LAN devices can still auto-pair. Regenerating the token forces all
             devices to unlock again.
           </p>

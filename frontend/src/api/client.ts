@@ -31,8 +31,12 @@ async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T>
       }
     }
     const errorData = await response.json().catch(() => ({}));
-    const error = new Error(errorData.error || `Request failed with status ${response.status}`) as Error & { code?: string };
+    const error = new Error(errorData.error || `Request failed with status ${response.status}`) as Error & {
+      code?: string;
+      status?: number;
+    };
     error.code = errorData.code;
+    error.status = response.status;
     throw error;
   }
   return response.json();
@@ -155,6 +159,35 @@ export const logAttendance = (data: { employeeCode: string; eventType: string; m
     method: 'POST',
     body: JSON.stringify(data),
   }).then(result => ({ ...result, online: true, result }));
+
+export type BulkSyncEvent = {
+  employeeCode: string;
+  eventType: string;
+  method?: string;
+  confidence?: number | null;
+  timestamp: string;
+  clientEventId: string;
+  deviceSequence?: number | null;
+};
+
+export const bulkSyncAttendance = (events: BulkSyncEvent[]) =>
+  fetchJson<{
+    merged: number;
+    skipped: number;
+    failed: number;
+    total: number;
+    results: Array<{
+      index: number;
+      clientEventId?: string;
+      employeeCode: string;
+      status: 'merged' | 'skipped' | 'failed';
+      reason?: string;
+    }>;
+  }>('/attendance/bulk-sync', {
+    method: 'POST',
+    body: JSON.stringify({ events }),
+  });
+
 // BUG-15: lastEvent is now an ISO string returned from the server;
 // format it on the client side to respect the user's timezone.
 export interface LiveWorker {
