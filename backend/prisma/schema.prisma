@@ -1,0 +1,194 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String    @id @default(cuid())
+  username           String    @unique
+  email              String?   @unique
+  passwordHash       String?
+  googleId           String?   @unique
+  authProvider       String    @default("local") // local | google
+  securityQuestion   String?
+  securityAnswerHash String?
+  name               String
+  role               String    @default("supervisor")
+  avatarUrl          String?
+  resetToken         String?
+  resetTokenExpiry   DateTime?
+  workerId           String?   @unique
+  hasSeenOnboarding  Boolean   @default(false)
+  mfaEnabled         Boolean   @default(false)
+  mfaSecret          String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @default(now()) @updatedAt
+  worker             Worker?   @relation(fields: [workerId], references: [id])
+}
+
+model Worker {
+  id               String             @id @default(cuid())
+  employeeCode     String             @unique @map("workerId")
+  name             String
+  email            String?
+  phone            String?
+  department       String
+  role             String             @default("worker")
+  dailyWage        Float              @default(0)
+  overtimeRate     Float              @default(0)
+  faceDescriptor   String?
+  avatarPhoto      String?
+  isActive         Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  attendanceEvents AttendanceEvent[]
+  dailyOverrides   DailyOverride[]
+  corrections      ManualCorrection[]
+  user             User?
+  shiftId          String?
+  shift            Shift?             @relation(fields: [shiftId], references: [id])
+
+  @@index([isActive])
+  @@index([shiftId])
+}
+
+model AttendanceEvent {
+  id         String          @id @default(cuid())
+  workerId   String
+  eventType  String
+  method     String          @default("face")
+  confidence Float?
+  hourlyRate Float?
+  timestamp  DateTime        @default(now())
+  occurredAt DateTime?
+  receivedAt DateTime        @default(now())
+  workDate   String?
+  terminalId String?         // ID of the mobile terminal that logged this scan (null = web dashboard)
+  actorId    String?
+  clientEventId String?      @unique
+  deviceSequence Int?
+  syncStatus String          @default("accepted")
+  worker     Worker          @relation(fields: [workerId], references: [id])
+  terminal   MobileTerminal? @relation(fields: [terminalId], references: [id])
+
+  @@index([workerId])
+  @@index([timestamp])
+  @@index([workerId, timestamp])
+  @@index([workerId, workDate])
+  @@index([terminalId])
+}
+
+model DailyOverride {
+  id             String   @id @default(cuid())
+  workerId       String
+  date           String
+  hours          Float
+  regularHours   Float?
+  overtimeHours  Float?
+  reason         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  worker         Worker   @relation(fields: [workerId], references: [id])
+
+  @@unique([workerId, date])
+}
+
+model ManualCorrection {
+  id            String    @id @default(cuid())
+  workerId      String
+  requestedBy   String
+  reason        String
+  eventType     String    @default("checked-in")
+  originalTime  DateTime?
+  correctedTime DateTime?
+  status        String    @default("pending")
+  requesterId   String?
+  approverId    String?
+  requestedAt   DateTime  @default(now())
+  decidedAt     DateTime?
+  appliedEventId String?
+  originalSnapshot String?
+  afterSnapshot String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  worker        Worker    @relation(fields: [workerId], references: [id])
+
+  @@index([status])
+  @@index([workerId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actor     String
+  action    String
+  target    String
+  details   String
+  ipAddress String   @default("System")
+  createdAt DateTime @default(now())
+  previousHash String?
+  hash      String?
+  retentionClass String @default("compliance")
+
+  @@index([createdAt])
+}
+
+model Shift {
+  id        String   @id @default(cuid())
+  name      String
+  startTime String
+  endTime   String
+  capacity  Int
+  createdAt DateTime @default(now())
+  workers   Worker[]
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model PayrollExport {
+  id          String   @id @default(cuid())
+  period      String
+  generatedAt DateTime @default(now())
+  format      String
+  workerCount Int
+  status      String   @default("active")
+  filename    String?
+  site        String   @default("main")
+  calculationVersion String @default("v1")
+  calculationHash String?
+  finalizedAt DateTime?
+  finalizedBy String?
+}
+
+// Represents an authorized mobile APK terminal (tablet kiosk or supervisor phone)
+model MobileTerminal {
+  id               String            @id @default(cuid())
+  name             String            // Human-readable name, e.g. "Gate-A Tablet"
+  deviceModel      String?           // e.g. "Samsung Galaxy Tab A8"
+  pairingCode      String            @unique // 6-digit OTP used for initial pairing
+  token            String?           @unique // Legacy compatibility only; new tokens are stored as hashes
+  tokenHash        String?           @unique
+  bluetoothUuid    String?           // BLE advertisement UUID for proximity discovery
+  status           String            @default("pending")  // pending | active | revoked
+  batteryLevel     Int?              // 0-100, reported via heartbeat
+  networkQuality   String?           // "wifi" | "mobile_data" | "offline"
+  pendingQueueSize Int               @default(0) // Offline scans buffered on device
+  lastSeenAt       DateTime?         // Last heartbeat timestamp
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  pairingExpiresAt  DateTime?
+  lastTokenRotatedAt DateTime?
+  pairingAttempts   Int               @default(0)
+  attendanceEvents AttendanceEvent[] // Events logged by this terminal
+
+  @@index([status])
+  @@index([pairingCode])
+}

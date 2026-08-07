@@ -1,0 +1,13 @@
+node_modules
+npm-debug.log
+.env
+.git
+.gitignore
+*.md
+dist
+# Don't copy face recognition model weights into the build context
+# (they will be baked into the dist/public/models during npm run build)
+.vscode
+.idea
+default_shadcn_theme.css
+postcss.config.mjs

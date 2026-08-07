@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>FAMS Supervisor - Live Floor</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "error": "#ff716c",
+                    "surface-container": "#001c28",
+                    "on-surface-variant": "#84b1ca",
+                    "on-primary-fixed": "#002c37",
+                    "on-primary": "#004c5e",
+                    "on-secondary": "#005d2c",
+                    "background": "#001019",
+                    "on-tertiary": "#49000d",
+                    "surface-container-low": "#001620",
+                    "on-background": "#c7ebff",
+                    "surface-container-lowest": "#000000",
+                    "on-secondary-container": "#e3ffe4",
+                    "on-surface": "#c7ebff",
+                    "outline-variant": "#1c4d62",
+                    "surface-container-high": "#002330",
+                    "surface-dim": "#001019",
+                    "error-dim": "#d7383b",
+                    "tertiary-fixed-dim": "#ff7981",
+                    "tertiary-dim": "#ff6f78",
+                    "on-tertiary-fixed": "#390008",
+                    "inverse-primary": "#00687e",
+                    "on-secondary-fixed": "#004820",
+                    "surface-tint": "#6dddff",
+                    "primary-fixed": "#00d2fd",
+                    "tertiary-fixed": "#ff9195",
+                    "primary-container": "#00d2fd",
+                    "error-container": "#9f0519",
+                    "surface-bright": "#003042",
+                    "secondary-fixed": "#3fff8b",
+                    "surface": "#001019",
+                    "primary-dim": "#00c3eb",
+                    "on-primary-fixed-variant": "#004c5d",
+                    "inverse-surface": "#f4faff",
+                    "on-error": "#490006",
+                    "tertiary-container": "#fe3c56",
+                    "on-secondary-fixed-variant": "#006832",
+                    "inverse-on-surface": "#2c5a70",
+                    "secondary-dim": "#24f07e",
+                    "secondary-container": "#006d35",
+                    "surface-variant": "#002939",
+                    "secondary-fixed-dim": "#24f07e",
+                    "outline": "#4e7b92",
+                    "secondary": "#3fff8b",
+                    "tertiary": "#ff6f78",
+                    "on-tertiary-fixed-variant": "#79001c",
+                    "surface-container-highest": "#002939",
+                    "primary-fixed-dim": "#00c3eb",
+                    "on-primary-container": "#004352",
+                    "on-error-container": "#ffa8a3",
+                    "on-tertiary-container": "#000000",
+                    "primary": "#6dddff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "xl": "32px",
+                    "sm": "8px",
+                    "lg": "24px",
+                    "base": "8px",
+                    "md": "16px",
+                    "xs": "4px"
+            },
+            "fontFamily": {
+                    "label-md": [
+                            "Inter"
+                    ],
+                    "body-md": [
+                            "Inter"
+                    ],
+                    "headline-md": [
+                            "Inter"
+                    ],
+                    "headline-lg": [
+                            "Inter"
+                    ]
+            },
+            "fontSize": {
+                    "label-md": [
+                            "14px",
+                            {
+                                    "lineHeight": "20px",
+                                    "letterSpacing": "0.1px",
+                                    "fontWeight": "500"
+                            }
+                    ],
+                    "body-md": [
+                            "16px",
+                            {
+                                    "lineHeight": "24px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "headline-md": [
+                            "24px",
+                            {
+                                    "lineHeight": "32px",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "headline-lg": [
+                            "32px",
+                            {
+                                    "lineHeight": "40px",
+                                    "fontWeight": "700"
+                            }
+                    ]
+            }
+          }
+        }
+      }
+    </script>
+<style>
+        body { background-color: #0A0F1E; }
+        .glass-panel {
+            background: rgba(0, 28, 40, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+    <script src="../js/offlineQueue.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/ui.js"></script>
+    <script src="../js/mobileNav.js"></script>
+</head>
+<body class="text-on-surface font-body-md min-h-screen flex flex-col pt-16 pb-28 md:hidden">
+<div id="connection-banner" class="hidden fixed top-16 left-0 right-0 z-40 bg-error-container/90 text-on-error-container text-xs text-center py-1.5 px-3"></div>
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-surface-container/80 dark:bg-surface-container/80 backdrop-blur-md border-b border-white/10 flex justify-between items-center px-md h-16">
+<h1 class="font-headline-md text-headline-md font-bold text-primary">Live Floor</h1>
+<div class="flex items-center gap-sm">
+<div class="glass-panel px-3 py-1 rounded-full text-sm font-label-md text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">calendar_today</span>
+                <span id="header-date">Oct 24, 2023</span>
+            </div>
+<img alt="Supervisor Profile" class="w-10 h-10 rounded-full border border-primary/30 object-cover" src="https://lh3.googleusercontent.com/aida/ADBb0uiNBKmIYh9EAtzgssP2iZLK8ttbgejMhJIpA0ZeSQaqjSXowrpU0cJQGgVkZq5YoaaKqMTia412Jy7TwXjdUm9JkyLZxZhC_QBgBB9SoQ6AenpJ8SNiGXMyXQcA18HuLMKi_m8tN9dv7O6ukuTVnxbE7ut1hbNGjwuS_k0Hw2q3jcGxDXuHky3Nf8Sp2NirUeCte59Y_ig9dqLcoNUb3Fz6eR0dQAAqbTBb0kvUzZjohWwIWR9Ybsenk_E"/>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 px-md py-4 space-y-lg overflow-y-auto">
+<!-- Stats Grid Bento -->
+<section class="grid grid-cols-2 gap-sm">
+<!-- Present -->
+<div class="glass-panel rounded-xl p-md border-l-4 border-l-secondary flex flex-col justify-between h-24">
+<span class="font-label-md text-label-md text-on-surface-variant">Present</span>
+<div id="stats-present" class="font-headline-lg text-headline-lg text-on-surface">--</div>
+</div>
+<!-- On Break -->
+<div class="glass-panel rounded-xl p-md border-l-4 border-l-[#FFC107] flex flex-col justify-between h-24">
+<span class="font-label-md text-label-md text-on-surface-variant">On Break</span>
+<div id="stats-break" class="font-headline-lg text-headline-lg text-on-surface">--</div>
+</div>
+<!-- Absent -->
+<div class="glass-panel rounded-xl p-md border-l-4 border-l-error flex flex-col justify-between h-24">
+<span class="font-label-md text-label-md text-on-surface-variant">Absent</span>
+<div id="stats-absent" class="font-headline-lg text-headline-lg text-on-surface">--</div>
+</div>
+<!-- Total -->
+<div class="glass-panel rounded-xl p-md border-l-4 border-l-primary flex flex-col justify-between h-24">
+<span class="font-label-md text-label-md text-on-surface-variant">Total</span>
+<div id="stats-total" class="font-headline-lg text-headline-lg text-primary">--</div>
+</div>
+</section>
+<!-- Filters -->
+<section id="filter-buttons" class="flex overflow-x-auto gap-sm hide-scrollbar pb-1">
+<button data-filter="all" class="filter-btn bg-primary text-on-primary-fixed font-label-md text-label-md px-4 py-2 rounded-full whitespace-nowrap flex-shrink-0">All</button>
+<button data-filter="present" class="filter-btn glass-panel text-on-surface-variant font-label-md text-label-md px-4 py-2 rounded-full whitespace-nowrap flex-shrink-0 hover:text-on-surface">Present</button>
+<button data-filter="break" class="filter-btn glass-panel text-on-surface-variant font-label-md text-label-md px-4 py-2 rounded-full whitespace-nowrap flex-shrink-0 hover:text-on-surface">On Break</button>
+<button data-filter="absent" class="filter-btn glass-panel text-on-surface-variant font-label-md text-label-md px-4 py-2 rounded-full whitespace-nowrap flex-shrink-0 hover:text-on-surface">Absent</button>
+</section>
+<!-- Worker List -->
+<section id="worker-list-container" class="space-y-sm">
+<div class="text-center text-on-surface-variant py-md">Loading workers...</div>
+</section>
+</main>
+<div id="mobile-nav-root"></div>
+<script>
+    let allAttendance = [];
+    let currentFilter = 'all';
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!window.famsApi.requireAuth()) return;
+
+        const user = window.famsApi.getSupervisorUser();
+        const terminal = window.famsApi.getTerminalInfo();
+        const serverLabel = window.famsApi.getServerUrl().replace(/^https?:\/\//, '');
+
+        // Set dynamic date in header
+        const dateSpan = document.getElementById('header-date');
+        if (dateSpan) {
+            const options = { month: 'short', day: 'numeric', year: 'numeric' };
+            dateSpan.textContent = new Date().toLocaleDateString('en-US', options);
+        }
+
+        // Fetch Stats and Worker List immediately
+        window.famsNav.mountMobileNav('live');
+        window.famsApi.refreshWorkerCache().catch(() => {});
+        loadDashboardData();
+
+        // Refresh every 10 seconds for real-time monitoring
+        setInterval(loadDashboardData, 10000);
+
+        // Filter button listeners
+        const filterBtns = document.querySelectorAll('.filter-btn');
+        filterBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const filter = e.target.getAttribute('data-filter');
+                currentFilter = filter;
+                
+                // Toggle active styles
+                filterBtns.forEach(b => {
+                    b.className = 'filter-btn glass-panel text-on-surface-variant font-label-md text-label-md px-4 py-2 rounded-full whitespace-nowrap flex-shrink-0 hover:text-on-surface';
+                });
+                e.target.className = 'filter-btn bg-primary text-on-primary-fixed font-label-md text-label-md px-4 py-2 rounded-full whitespace-nowrap flex-shrink-0';
+
+                // Re-render filtered list
+                applyFilterAndRender();
+            });
+        });
+
+    });
+
+    function showConnectionError(msg) {
+        const banner = document.getElementById('connection-banner');
+        if (!banner) return;
+        banner.textContent = msg;
+        banner.classList.remove('hidden');
+    }
+
+    function hideConnectionError() {
+        const banner = document.getElementById('connection-banner');
+        if (banner) banner.classList.add('hidden');
+    }
+
+    async function loadDashboardData() {
+        try {
+            hideConnectionError();
+            // Get stats
+            const stats = await window.famsApi.getDashboardStats();
+            document.getElementById('stats-present').textContent = stats.presentCount ?? 0;
+            document.getElementById('stats-break').textContent = stats.breakCount ?? 0;
+            document.getElementById('stats-absent').textContent = stats.absentCount ?? 0;
+            document.getElementById('stats-total').textContent = stats.totalWorkers ?? 0;
+
+            // Get live attendance
+            allAttendance = await window.famsApi.getLiveAttendance();
+            applyFilterAndRender();
+        } catch (err) {
+            console.error('Failed to load dashboard data:', err);
+            showConnectionError(err.message || 'Cannot reach FAMS server');
+            document.getElementById('worker-list-container').innerHTML =
+                `<div class="text-center text-on-surface-variant py-md">Unable to load data. Check server at ${window.famsApi.getServerUrl().replace(/^https?:\/\//, '')}.</div>`;
+        }
+    }
+
+    function applyFilterAndRender() {
+        let filtered = allAttendance;
+        if (currentFilter === 'present') {
+            filtered = allAttendance.filter(w => w.status === 'present' || w.status === 'in');
+        } else if (currentFilter === 'break') {
+            filtered = allAttendance.filter(w => w.status === 'break');
+        } else if (currentFilter === 'absent') {
+            filtered = allAttendance.filter(w => w.status === 'absent');
+        }
+        renderWorkerList(filtered);
+    }
+
+    function renderWorkerList(attendanceList) {
+        const container = document.getElementById('worker-list-container');
+        if (!attendanceList || attendanceList.length === 0) {
+            container.innerHTML = `<div class="text-center text-on-surface-variant py-md">No workers match this status right now.</div>`;
+            return;
+        }
+
+        let html = '';
+        attendanceList.forEach(worker => {
+            // Determine status badge class and text
+            let statusBadge = '';
+            let borderClass = 'border-secondary';
+            let statusText = 'Checked In';
+            
+            if (worker.status === 'present' || worker.status === 'in') {
+                statusBadge = 'bg-secondary-container/30 border-secondary/50 text-secondary';
+                borderClass = 'border-secondary';
+                statusText = 'Checked In';
+            } else if (worker.status === 'break') {
+                statusBadge = 'bg-[#FFC107]/20 border-[#FFC107]/50 text-[#FFC107]';
+                borderClass = 'border-[#FFC107]';
+                statusText = 'Tea Break';
+            } else {
+                statusBadge = 'bg-error-container/30 border-error/50 text-error';
+                borderClass = 'border-error';
+                statusText = 'Absent';
+            }
+
+            // Duration calculation or display WFH etc.
+            let durationText = worker.department || 'Production';
+            if (worker.todayHours !== undefined) {
+                durationText += ` • ${worker.todayHours}h`;
+            }
+
+            const avatarUrl = worker.avatarUrl || worker.avatarPhoto || null;
+            const avatarHtml = avatarUrl
+                ? `<img alt="${worker.name}" class="w-full h-full rounded-full object-cover ${worker.status === 'absent' ? 'grayscale' : ''}" src="${avatarUrl}"/>`
+                : `<div class="w-full h-full rounded-full bg-surface-container-high flex items-center justify-center text-primary font-bold text-sm">${window.famsUi.initialsAvatar(worker.name)}</div>`;
+
+            html += `
+            <div class="glass-panel rounded-xl p-3 flex items-center justify-between ${worker.status === 'absent' ? 'opacity-70' : ''}">
+                <div class="flex items-center gap-3">
+                    <div class="relative w-12 h-12">
+                        <div class="absolute inset-0 rounded-full border-2 ${borderClass} p-[2px]">
+                            ${avatarHtml}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="font-label-md text-label-md text-on-surface font-bold">${worker.name}</div>
+                        <div class="text-xs text-on-surface-variant">${durationText}</div>
+                    </div>
+                </div>
+                <div class="px-3 py-1 rounded-full ${statusBadge} font-label-md text-xs whitespace-nowrap">
+                    ${statusText}
+                </div>
+            </div>
+            `;
+        });
+
+        container.innerHTML = html;
+    }
+</script>
+</body></html>

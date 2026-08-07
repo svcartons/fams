@@ -1,0 +1,54 @@
+:root {
+  --font-size: 14px;
+
+  --canvas: #F5F5F4;
+  --surface: #FFFFFF;
+  --border: #E7E5E4;
+  --text: #1C1917;
+  --muted: #78716C;
+  --accent: #1D4ED8;
+  --accent-hover: #1E40AF;
+  --danger: #DC2626;
+  --warning: #D97706;
+  --success: #059669;
+  --neutral: #57534E;
+
+  --radius: 6px;
+
+  /* shadcn compat */
+  --background: var(--canvas);
+  --foreground: var(--text);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --primary: var(--accent);
+  --primary-foreground: #FFFFFF;
+  --secondary: #FAFAF9;
+  --muted-foreground: var(--muted);
+  --destructive: var(--danger);
+  --border-color: var(--border);
+  --ring: var(--accent);
+  --input-background: var(--surface);
+
+  --gray-50: #FAFAF9;
+  --gray-100: #F5F5F4;
+  --gray-200: #E7E5E4;
+  --gray-300: #D6D3D1;
+  --gray-400: #A8A29E;
+  --gray-500: #78716C;
+  --gray-600: #57534E;
+  --gray-700: #44403C;
+  --gray-800: #292524;
+  --gray-900: #1C1917;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-border: var(--border);
+  --color-muted-foreground: var(--muted);
+}
+
+@layer base {
+  * { border-color: var(--border); }
+  body { background: var(--canvas); color: var(--text); font-size: var(--font-size); }
+  html { font-size: var(--font-size); }
+}

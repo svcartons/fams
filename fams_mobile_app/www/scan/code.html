@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>Scan — FAMS Mobile</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@400&display=swap" rel="stylesheet"/>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        background: '#001019', surface: '#001c28', primary: '#6dddff',
+        secondary: '#3fff8b', error: '#ff716c',
+        'on-surface': '#c7ebff', 'on-surface-variant': '#84b1ca', outline: '#4e7b92',
+      },
+      fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+    },
+  },
+};
+</script>
+<script src="../js/offlineQueue.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/mobileNav.js"></script>
+<style>
+  body { font-family: Inter, system-ui, sans-serif; background: #001019; }
+  .glass { background: rgba(0,28,40,.65); border: 1px solid rgba(255,255,255,.08); backdrop-filter: blur(12px); }
+  #video { transform: scaleX(-1); }
+</style>
+</head>
+<body class="min-h-screen text-on-surface pb-28">
+<header class="sticky top-0 z-40 h-14 flex items-center justify-between px-4 border-b border-white/10 bg-surface/80 backdrop-blur-md">
+  <h1 class="text-lg font-semibold text-primary">Scan attendance</h1>
+  <span id="pending-pill" class="hidden text-xs px-2.5 py-1 rounded-full bg-error/20 text-error border border-error/30"></span>
+</header>
+
+<main class="p-4 max-w-lg mx-auto space-y-4">
+  <div class="relative rounded-2xl overflow-hidden glass aspect-[4/3] bg-black">
+    <video id="video" class="w-full h-full object-cover" autoplay playsinline muted></video>
+    <div id="camera-placeholder" class="absolute inset-0 flex flex-col items-center justify-center text-on-surface-variant gap-2">
+      <span class="material-symbols-outlined text-4xl">videocam_off</span>
+      <p class="text-sm">Camera unavailable</p>
+    </div>
+    <div class="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/70 to-transparent">
+      <p class="text-xs text-white/80">Point at worker badge or select name below</p>
+    </div>
+  </div>
+
+  <div>
+    <label class="text-xs font-medium text-on-surface-variant uppercase tracking-wide">Employee code</label>
+    <div class="flex gap-2 mt-1">
+      <input id="code-input" type="text" placeholder="e.g. W-1234 or scan QR"
+        class="flex-1 rounded-lg bg-[#001019] border border-outline/50 px-3 py-2.5 text-on-surface focus:border-primary focus:outline-none uppercase"/>
+      <button id="lookup-btn" type="button" class="px-4 rounded-lg border border-primary/40 text-primary font-medium">Find</button>
+    </div>
+  </div>
+
+  <div>
+    <label class="text-xs font-medium text-on-surface-variant uppercase tracking-wide">Search workers</label>
+    <input id="search-input" type="search" placeholder="Name or department…"
+      class="w-full mt-1 rounded-lg bg-[#001019] border border-outline/50 px-3 py-2.5 text-on-surface focus:border-primary focus:outline-none"/>
+  </div>
+
+  <div id="worker-list" class="max-h-48 overflow-y-auto space-y-2 rounded-xl glass p-2"></div>
+
+  <div id="selected-card" class="hidden glass rounded-xl p-4 flex items-center gap-3">
+    <div id="selected-avatar" class="w-12 h-12 rounded-full bg-surface flex items-center justify-center text-primary font-bold"></div>
+    <div class="flex-1 min-w-0">
+      <p id="selected-name" class="font-semibold truncate"></p>
+      <p id="selected-code" class="text-xs text-on-surface-variant font-mono"></p>
+    </div>
+  </div>
+
+  <button id="log-btn" type="button" disabled
+    class="w-full py-4 rounded-xl bg-gradient-to-r from-primary to-[#00c3eb] text-[#004352] font-bold text-lg shadow-lg disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+    <span class="material-symbols-outlined">how_to_reg</span>
+    Log check-in / out
+  </button>
+
+  <p class="text-xs text-center text-on-surface-variant">Works offline — scans queue locally and sync from the <strong>Sync</strong> tab when back on Wi‑Fi with your laptop server.</p>
+</main>
+
+<div id="mobile-nav-root"></div>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+let selectedWorker = null;
+let videoStream = null;
+let qrScanner = null;
+
+function updatePendingPill() {
+  const n = window.famsApi.getPendingCount();
+  const pill = document.getElementById('pending-pill');
+  if (n > 0) {
+    pill.textContent = `${n} queued`;
+    pill.classList.remove('hidden');
+  } else {
+    pill.classList.add('hidden');
+  }
+  window.famsNav.mountMobileNav('scan');
+}
+
+function captureThumb() {
+  const video = document.getElementById('video');
+  if (!video.videoWidth) return null;
+  const c = document.createElement('canvas');
+  c.width = 160; c.height = 120;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(video, 0, 0, c.width, c.height);
+  try { return c.toDataURL('image/jpeg', 0.6); } catch { return null; }
+}
+
+function renderWorkers(filter = '') {
+  const list = document.getElementById('worker-list');
+  const q = filter.trim().toLowerCase();
+  let workers = window.famsQueue.getWorkersCache();
+  if (q) {
+    workers = workers.filter(w =>
+      w.name.toLowerCase().includes(q) ||
+      w.employeeCode.toLowerCase().includes(q) ||
+      (w.department || '').toLowerCase().includes(q)
+    );
+  }
+  if (!workers.length) {
+    list.innerHTML = `<p class="text-sm text-on-surface-variant text-center py-4">No workers cached. Connect to server once to download roster.</p>`;
+    return;
+  }
+  list.innerHTML = workers.slice(0, 40).map(w => `
+    <button type="button" data-code="${w.employeeCode}" data-name="${w.name.replace(/"/g, '&quot;')}"
+      class="worker-row w-full text-left flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors ${selectedWorker?.employeeCode === w.employeeCode ? 'ring-1 ring-primary bg-primary/10' : ''}">
+      <div class="w-9 h-9 rounded-full bg-surface flex items-center justify-center text-primary text-xs font-bold shrink-0">${window.famsUi.initialsAvatar(w.name)}</div>
+      <div class="min-w-0">
+        <p class="text-sm font-medium truncate">${w.name}</p>
+        <p class="text-xs text-on-surface-variant font-mono">${w.employeeCode}${w.department ? ' · ' + w.department : ''}</p>
+      </div>
+    </button>`).join('');
+
+  list.querySelectorAll('.worker-row').forEach(btn => {
+    btn.addEventListener('click', () => selectWorker({
+      employeeCode: btn.dataset.code,
+      name: btn.dataset.name,
+    }));
+  });
+}
+
+function selectWorker(w) {
+  selectedWorker = w;
+  document.getElementById('code-input').value = w.employeeCode;
+  document.getElementById('selected-card').classList.remove('hidden');
+  document.getElementById('selected-name').textContent = w.name;
+  document.getElementById('selected-code').textContent = w.employeeCode;
+  document.getElementById('selected-avatar').textContent = window.famsUi.initialsAvatar(w.name);
+  document.getElementById('log-btn').disabled = false;
+  renderWorkers(document.getElementById('search-input').value);
+}
+
+async function startCamera() {
+  const video = document.getElementById('video');
+  const ph = document.getElementById('camera-placeholder');
+  try {
+    videoStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } },
+      audio: false,
+    });
+    video.srcObject = videoStream;
+    ph.classList.add('hidden');
+    startQrReader();
+  } catch (err) {
+    console.warn(err);
+    ph.classList.remove('hidden');
+  }
+}
+
+function startQrReader() {
+  if (typeof Html5Qrcode === 'undefined') return;
+  const readerId = 'qr-reader-hidden';
+  if (!document.getElementById(readerId)) {
+    const d = document.createElement('div');
+    d.id = readerId;
+    d.className = 'hidden';
+    document.body.appendChild(d);
+  }
+  qrScanner = new Html5Qrcode(readerId);
+  Html5Qrcode.getCameras().then(cameras => {
+    if (!cameras.length) return;
+    const cam = cameras.find(c => /back|rear|environment/i.test(c.label)) || cameras[cameras.length - 1];
+    qrScanner.start(
+      cam.id,
+      { fps: 8, qrbox: { width: 200, height: 200 } },
+      (decoded) => {
+        const code = decoded.trim().toUpperCase();
+        document.getElementById('code-input').value = code;
+        const w = window.famsQueue.getWorkersCache().find(x => x.employeeCode.toUpperCase() === code);
+        if (w) selectWorker(w);
+        else selectWorker({ employeeCode: code, name: code });
+        window.famsUi.showToast('QR scanned: ' + code, 'success');
+      },
+      () => {}
+    ).catch(() => {});
+  }).catch(() => {});
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  if (!window.famsApi.requireAuth()) return;
+
+  window.famsNav.mountMobileNav('scan');
+  updatePendingPill();
+  window.addEventListener('fams-queue-changed', updatePendingPill);
+
+  await window.famsApi.refreshWorkerCache();
+  renderWorkers();
+
+  document.getElementById('search-input').addEventListener('input', (e) => renderWorkers(e.target.value));
+
+  document.getElementById('lookup-btn').addEventListener('click', () => {
+    const code = document.getElementById('code-input').value.trim().toUpperCase();
+    if (!code) return;
+    const w = window.famsQueue.getWorkersCache().find(x => x.employeeCode.toUpperCase() === code);
+    selectWorker(w || { employeeCode: code, name: code });
+  });
+
+  document.getElementById('log-btn').addEventListener('click', async () => {
+    if (!selectedWorker) return;
+    const btn = document.getElementById('log-btn');
+    window.famsUi.setButtonLoading(btn, true);
+    try {
+      const thumb = captureThumb();
+      const res = await window.famsApi.logAttendance({
+        employeeCode: selectedWorker.employeeCode,
+        workerName: selectedWorker.name,
+        eventType: 'auto',
+        method: 'mobile_scan',
+        confidence: 95,
+        snapshotThumb: thumb,
+      });
+      if (res.online) {
+        const ev = res.result?.eventType || 'logged';
+        window.famsUi.showToast(`${selectedWorker.name}: ${ev.replace('-', ' ')}`, 'success');
+      } else {
+        window.famsUi.showToast(`Saved offline (${window.famsApi.getPendingCount()} queued)`, 'info');
+      }
+      updatePendingPill();
+      selectedWorker = null;
+      document.getElementById('selected-card').classList.add('hidden');
+      document.getElementById('log-btn').disabled = true;
+    } catch (err) {
+      window.famsUi.showToast(err.message, 'error');
+    } finally {
+      window.famsUi.setButtonLoading(btn, false, '<span class="material-symbols-outlined">how_to_reg</span> Log check-in / out');
+    }
+  });
+
+  startCamera();
+});
+
+window.addEventListener('beforeunload', () => {
+  if (videoStream) videoStream.getTracks().forEach(t => t.stop());
+  if (qrScanner) qrScanner.stop().catch(() => {});
+});
+</script>
+</body>
+</html>

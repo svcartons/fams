@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Terminals</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "surface-bright": "#003042",
+                      "on-secondary": "#005d2c",
+                      "secondary-fixed": "#3fff8b",
+                      "tertiary": "#ff6f78",
+                      "primary-dim": "#00c3eb",
+                      "on-surface-variant": "#84b1ca",
+                      "tertiary-container": "#fe3c56",
+                      "on-tertiary-fixed": "#390008",
+                      "on-secondary-fixed": "#004820",
+                      "on-primary-container": "#004352",
+                      "secondary-container": "#006d35",
+                      "tertiary-fixed": "#ff9195",
+                      "surface-container-low": "#001620",
+                      "outline-variant": "#1c4d62",
+                      "surface-container-high": "#002330",
+                      "on-primary-fixed": "#002c37",
+                      "on-secondary-fixed-variant": "#006832",
+                      "on-background": "#c7ebff",
+                      "inverse-surface": "#f4faff",
+                      "primary": "#6dddff",
+                      "primary-fixed-dim": "#00c3eb",
+                      "primary-container": "#00d2fd",
+                      "surface-container-lowest": "#000000",
+                      "on-surface": "#c7ebff",
+                      "tertiary-fixed-dim": "#ff7981",
+                      "outline": "#4e7b92",
+                      "tertiary-dim": "#ff6f78",
+                      "on-tertiary-container": "#000000",
+                      "on-tertiary": "#49000d",
+                      "on-primary": "#004c5e",
+                      "on-primary-fixed-variant": "#004c5d",
+                      "secondary-dim": "#24f07e",
+                      "surface-variant": "#002939",
+                      "inverse-primary": "#00687e",
+                      "surface-tint": "#6dddff",
+                      "surface": "#001019",
+                      "on-tertiary-fixed-variant": "#79001c",
+                      "inverse-on-surface": "#2c5a70",
+                      "secondary": "#3fff8b",
+                      "on-error": "#490006",
+                      "error": "#ff716c",
+                      "primary-fixed": "#00d2fd",
+                      "on-error-container": "#ffa8a3",
+                      "background": "#001019",
+                      "surface-container-highest": "#002939",
+                      "surface-dim": "#001019",
+                      "surface-container": "#001c28",
+                      "secondary-fixed-dim": "#24f07e",
+                      "on-secondary-container": "#e3ffe4",
+                      "error-container": "#9f0519",
+                      "error-dim": "#d7383b"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "xs": "4px",
+                      "xl": "32px",
+                      "sm": "8px",
+                      "md": "16px",
+                      "base": "8px",
+                      "lg": "24px"
+              },
+              "fontFamily": {
+                      "label-md": [
+                              "Inter"
+                      ],
+                      "headline-lg": [
+                              "Inter"
+                      ],
+                      "headline-md": [
+                              "Inter"
+                      ],
+                      "body-md": [
+                              "Inter"
+                      ]
+              },
+              "fontSize": {
+                      "label-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "letterSpacing": "0.1px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "headline-lg": [
+                              "32px",
+                              {
+                                      "lineHeight": "40px",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "headline-md": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ]
+              }
+            },
+          }
+        }
+    </script>
+<style>
+        .glass-card {
+            background: rgba(0, 41, 57, 0.4);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .pulse-green {
+            animation: pulse-green 2s infinite;
+        }
+        @keyframes pulse-green {
+            0% { box-shadow: 0 0 0 0 rgba(63, 255, 139, 0.7); }
+            70% { box-shadow: 0 0 0 6px rgba(63, 255, 139, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(63, 255, 139, 0); }
+        }
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom, 20px); }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  <script src="../js/offlineQueue.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/ui.js"></script>
+  <script src="../js/mobileNav.js"></script>
+  </head>
+<body class="bg-background text-on-surface min-h-screen font-body-md antialiased overflow-x-hidden pb-28">
+<!-- TopAppBar -->
+<header class="bg-surface-container/80 dark:bg-surface-container/80 backdrop-blur-md fixed top-0 w-full z-50 border-b border-white/10 flex justify-between items-center px-md h-16 md:hidden">
+<div class="flex items-center gap-sm">
+<span class="font-headline-md text-headline-md font-bold text-primary">Terminals</span>
+</div>
+<button class="flex items-center justify-center text-primary hover:bg-white/5 active:scale-95 transition-transform p-sm rounded-full">
+<span class="material-symbols-outlined">add</span>
+</button>
+</header>
+<!-- Main Content Canvas -->
+<main id="terminals-container" class="pt-20 pb-32 px-md flex flex-col gap-md md:hidden">
+<div class="text-center text-on-surface-variant py-md">Loading terminals...</div>
+</main>
+<!-- Floating Action Button -->
+<button class="fixed bottom-28 right-md w-14 h-14 bg-primary text-on-primary-fixed rounded-xl flex items-center justify-center shadow-lg active:scale-95 transition-transform z-40 md:hidden">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">link</span>
+</button>
+<div id="mobile-nav-root"></div>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!window.famsApi.requireAuth()) return;
+
+        window.famsNav.mountMobileNav('terminals');
+        loadTerminals();
+        
+        // Refresh every 15 seconds
+        setInterval(loadTerminals, 15000);
+    });
+
+    async function loadTerminals() {
+        try {
+            const terminals = await window.famsApi.getTerminals();
+            renderTerminals(terminals);
+        } catch (err) {
+            console.error('Failed to load terminals:', err);
+            document.getElementById('terminals-container').innerHTML = 
+                '<div class="text-center text-error py-md">Failed to load terminals.</div>';
+        }
+    }
+
+    function renderTerminals(list) {
+        const container = document.getElementById('terminals-container');
+        if (!list || list.length === 0) {
+            container.innerHTML = '<div class="text-center text-on-surface-variant py-md">No registered terminals found.</div>';
+            return;
+        }
+
+        let html = '';
+        list.forEach(t => {
+            const isOnline = t.isOnline ?? false;
+            const statusText = isOnline ? 'Online' : 'Offline';
+            const statusClass = isOnline ? 'bg-secondary pulse-green' : 'bg-on-surface-variant';
+            const statusTextClass = isOnline ? 'text-secondary' : 'text-on-surface-variant';
+            
+            // Battery icon selection
+            let batteryIcon = 'battery_5_bar';
+            let batteryColor = 'text-secondary';
+            const level = t.batteryLevel ?? 100;
+            if (level < 20) {
+                batteryIcon = 'battery_1_bar';
+                batteryColor = 'text-error';
+            } else if (level < 50) {
+                batteryIcon = 'battery_3_bar';
+                batteryColor = 'text-[#ffb300]';
+            }
+
+            html += `
+            <article class="glass-card rounded-xl p-md flex flex-col gap-md relative overflow-hidden ${!isOnline ? 'opacity-70' : ''}">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="font-headline-md text-body-md font-semibold text-on-surface">${t.name}</h3>
+                        <p class="font-label-md text-label-md text-on-surface-variant">${t.deviceModel || 'Tablet'}</p>
+                    </div>
+                    <div class="flex items-center gap-xs">
+                        <span class="w-2 h-2 rounded-full ${statusClass}"></span>
+                        <span class="font-label-md text-label-md ${statusTextClass}">${statusText}</span>
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-sm">
+                    <div class="bg-surface-container-high border border-white/5 rounded-lg px-sm py-xs flex items-center gap-xs">
+                        <span class="material-symbols-outlined ${batteryColor}" style="font-size: 16px;">${batteryIcon}</span>
+                        <span class="font-label-md text-label-md text-on-surface">${level}%</span>
+                    </div>
+                    <div class="bg-surface-container-high border border-white/5 rounded-lg px-sm py-xs flex items-center gap-xs">
+                        <span class="material-symbols-outlined text-primary" style="font-size: 16px;">wifi</span>
+                        <span class="font-label-md text-label-md text-on-surface">${t.networkQuality || 'Connected'}</span>
+                    </div>
+                    <div class="bg-secondary/10 border border-secondary/30 rounded-lg px-sm py-xs flex items-center gap-xs">
+                        <span class="font-label-md text-label-md text-secondary">${t.pendingQueueSize ?? 0} pending</span>
+                    </div>
+                </div>
+                <div class="pt-sm border-t border-white/10 flex justify-between items-center">
+                    <span class="font-label-md text-label-md text-on-surface-variant">Today's Activity</span>
+                    <span class="font-label-md text-label-md text-on-surface font-semibold">${t.totalScans ?? 0} scans</span>
+                </div>
+            </article>
+            `;
+        });
+
+        container.innerHTML = html;
+    }
+</script>
+</body></html>

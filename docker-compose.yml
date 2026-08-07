@@ -1,0 +1,116 @@
+services:
+  # ── Backend (Node.js + Prisma + PostgreSQL) ──────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fams-backend
+    restart: unless-stopped   # Restart on crash, but NOT on manual docker stop
+
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=postgresql://fams_user:${POSTGRES_PASSWORD}@postgres:5432/fams_db?schema=public&connection_limit=5&pool_timeout=20
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET to a random value of at least 32 characters}
+      - BIOMETRIC_ENCRYPTION_KEY=${BIOMETRIC_ENCRYPTION_KEY:?Set BIOMETRIC_ENCRYPTION_KEY to a random value}
+      # Cap V8 old-space heap at 256 MB — forces GC before system OOM kills the process
+      - NODE_OPTIONS=--max-old-space-size=256
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    # Memory limits — prevents a single container from starving the host
+    deploy:
+      resources:
+        limits:
+          memory: 384M        # Cap at 384 MB RAM (matches --max-old-space-size=256 + OS overhead)
+          cpus: "1.0"
+        reservations:
+          memory: 128M        # Guarantee at least 128 MB available at startup
+
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/api/health', r => r.statusCode === 200 ? process.exit(0) : process.exit(1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s      # Give Prisma migrate time on first start
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"       # Rotate logs at 10 MB
+        max-file: "3"         # Keep only last 3 rotated files (~30 MB max)
+
+  # ── Frontend (Nginx serving static React bundle) ─────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: fams-frontend
+    restart: unless-stopped
+
+    ports:
+      - "8080:80"
+
+    depends_on:
+      backend:
+        condition: service_healthy  # Wait for backend health check before starting
+
+    deploy:
+      resources:
+        limits:
+          memory: 64M         # Nginx + static files — very lightweight
+          cpus: "0.5"
+        reservations:
+          memory: 32M
+
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: fams-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fams_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_DB: fams_db
+    volumes:
+      - fams-postgres-data:/var/lib/postgresql/data
+    # Low-memory PostgreSQL tuning for 2 GB RAM machines
+    command: >
+      postgres
+      -c shared_buffers=64MB
+      -c work_mem=2MB
+      -c maintenance_work_mem=32MB
+      -c max_connections=20
+      -c effective_cache_size=256MB
+      -c wal_buffers=4MB
+      -c checkpoint_completion_target=0.9
+      -c log_min_duration_statement=1000
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fams_user -d fams_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# ── Named Volumes ─────────────────────────────────────────────────────
+volumes:
+  fams-postgres-data:
+    driver: local

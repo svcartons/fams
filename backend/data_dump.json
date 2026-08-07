@@ -1,0 +1,107 @@
+{
+  "users": [
+    {
+      "id": "cmp3vn0dp00009vytjucfv2ha",
+      "username": "Jayanth",
+      "email": null,
+      "passwordHash": "$2b$10$O3HTlRA7aIpKA2sYRtidtOCVTznl4Lr6JsCIuNN./QLrGTGD.uDBm",
+      "securityQuestion": null,
+      "securityAnswerHash": null,
+      "name": "Jayanth",
+      "role": "admin",
+      "avatarUrl": null,
+      "resetToken": null,
+      "resetTokenExpiry": null,
+      "workerId": null,
+      "createdAt": "2026-05-13T09:48:28.717Z",
+      "updatedAt": "2026-05-13T09:48:28.717Z"
+    }
+  ],
+  "workers": [],
+  "attendanceEvents": [],
+  "dailyOverrides": [],
+  "manualCorrections": [],
+  "auditLogs": [
+    {
+      "id": "cmpb0v0u80000mp38ldyhxvnq",
+      "actor": "Jayanth",
+      "action": "System Reset",
+      "target": "All Operational Data",
+      "details": "Performed a factory reset, clearing all dummy workers and attendance data.",
+      "ipAddress": "System",
+      "createdAt": "2026-05-18T09:49:03.873Z"
+    },
+    {
+      "id": "cmpb0vdmq0001mp3869gdijeb",
+      "actor": "Jayanth",
+      "action": "User Deleted",
+      "target": "Jyoti",
+      "details": "Account removed for jyoti",
+      "ipAddress": "127.0.0.1",
+      "createdAt": "2026-05-18T09:49:20.450Z"
+    }
+  ],
+  "shifts": [],
+  "systemSettings": [
+    {
+      "id": "cmorl8yrh0003c0rs0jj2r5ar",
+      "key": "lunchBreakDuration",
+      "value": "30",
+      "updatedAt": "2026-05-18T06:02:52.089Z"
+    },
+    {
+      "id": "cmorl8yri0009c0rscjbjviw3",
+      "key": "perm_supervisor_worker_delete",
+      "value": "false",
+      "updatedAt": "2026-05-18T06:02:52.101Z"
+    },
+    {
+      "id": "cmorl8yrp000ac0rsw2tvwp2s",
+      "key": "perm_supervisor_correction_approve",
+      "value": "true",
+      "updatedAt": "2026-05-18T06:02:52.102Z"
+    },
+    {
+      "id": "cmorl8yrh0004c0rsiwnxhu9e",
+      "key": "standardWorkHours",
+      "value": "8.30",
+      "updatedAt": "2026-05-18T06:02:52.094Z"
+    },
+    {
+      "id": "cmorl8yri0007c0rs14e5p063",
+      "key": "overtimeThreshold",
+      "value": "9",
+      "updatedAt": "2026-05-18T06:02:52.096Z"
+    },
+    {
+      "id": "cmorl8yrh0002c0rsljjpecvc",
+      "key": "breakOvertimeAlert",
+      "value": "5",
+      "updatedAt": "2026-05-18T06:02:52.092Z"
+    },
+    {
+      "id": "cmorl8yri0006c0rsuelx9fxm",
+      "key": "perm_supervisor_salary_view",
+      "value": "true",
+      "updatedAt": "2026-05-18T06:02:52.099Z"
+    },
+    {
+      "id": "cmorl8yri0008c0rsratrtlma",
+      "key": "deductBreaks",
+      "value": "true",
+      "updatedAt": "2026-05-18T06:02:52.097Z"
+    },
+    {
+      "id": "cmorl8yri0005c0rse1zlhpgq",
+      "key": "teaBreakDuration",
+      "value": "0",
+      "updatedAt": "2026-05-18T06:02:52.086Z"
+    },
+    {
+      "id": "cmp5gn95t0007q3x1cqybmdiw",
+      "key": "perm_supervisor_worker_view",
+      "value": "true",
+      "updatedAt": "2026-05-18T06:02:52.100Z"
+    }
+  ]
+}

@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>FAMS Mobile - Sync Center</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "surface-tint": "#6dddff",
+                      "surface-dim": "#001019",
+                      "inverse-primary": "#00687e",
+                      "tertiary": "#ff6f78",
+                      "on-secondary-fixed": "#004820",
+                      "on-surface": "#c7ebff",
+                      "tertiary-container": "#fe3c56",
+                      "on-error": "#490006",
+                      "on-secondary": "#005d2c",
+                      "on-primary": "#004c5e",
+                      "secondary-dim": "#24f07e",
+                      "background": "#001019",
+                      "primary-fixed-dim": "#00c3eb",
+                      "surface": "#001019",
+                      "on-secondary-fixed-variant": "#006832",
+                      "on-tertiary": "#49000d",
+                      "on-surface-variant": "#84b1ca",
+                      "primary-fixed": "#00d2fd",
+                      "on-error-container": "#ffa8a3",
+                      "secondary-container": "#006d35",
+                      "tertiary-fixed-dim": "#ff7981",
+                      "secondary-fixed-dim": "#24f07e",
+                      "on-tertiary-fixed-variant": "#79001c",
+                      "on-tertiary-fixed": "#390008",
+                      "surface-container": "#001c28",
+                      "on-background": "#c7ebff",
+                      "error-container": "#9f0519",
+                      "surface-container-lowest": "#000000",
+                      "on-primary-fixed-variant": "#004c5d",
+                      "primary-container": "#00d2fd",
+                      "surface-container-highest": "#002939",
+                      "surface-bright": "#003042",
+                      "surface-variant": "#002939",
+                      "on-primary-container": "#004352",
+                      "error": "#ff716c",
+                      "inverse-surface": "#f4faff",
+                      "error-dim": "#d7383b",
+                      "secondary-fixed": "#3fff8b",
+                      "surface-container-high": "#002330",
+                      "secondary": "#3fff8b",
+                      "outline-variant": "#1c4d62",
+                      "on-tertiary-container": "#000000",
+                      "primary": "#6dddff",
+                      "primary-dim": "#00c3eb",
+                      "outline": "#4e7b92",
+                      "on-secondary-container": "#e3ffe4",
+                      "surface-container-low": "#001620",
+                      "on-primary-fixed": "#002c37",
+                      "tertiary-fixed": "#ff9195",
+                      "tertiary-dim": "#ff6f78",
+                      "inverse-on-surface": "#2c5a70"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "md": "16px",
+                      "xl": "32px",
+                      "sm": "8px",
+                      "base": "8px",
+                      "xs": "4px",
+                      "lg": "24px"
+              },
+              "fontFamily": {
+                      "headline-md": [
+                              "Inter"
+                      ],
+                      "headline-lg": [
+                              "Inter"
+                      ],
+                      "label-md": [
+                              "Inter"
+                      ],
+                      "body-md": [
+                              "Inter"
+                      ]
+              },
+              "fontSize": {
+                      "headline-md": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-lg": [
+                              "32px",
+                              {
+                                      "lineHeight": "40px",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "label-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "letterSpacing": "0.1px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ]
+              }
+            },
+          }
+        }
+    </script>
+<style>
+        .glass-card {
+            background: rgba(0, 41, 57, 0.4);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .spin-slow {
+            animation: spin 3s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  <script src="../js/offlineQueue.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/ui.js"></script>
+  <script src="../js/mobileNav.js"></script>
+  </head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex flex-col antialiased pb-28">
+<!-- TopAppBar -->
+<header class="bg-surface/60 backdrop-blur-md full-width top-0 shadow-none flex justify-between items-center px-md h-16 w-full z-50 sticky">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary text-2xl">factory</span>
+<h1 class="font-headline-md text-headline-md font-bold tracking-tight text-primary">Sync Center</h1>
+</div>
+<div class="flex items-center gap-sm">
+<button class="p-2 rounded-full hover:bg-white/5 transition-all duration-300 active:scale-95 text-on-surface-variant">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</header>
+<!-- Main Content -->
+<main class="flex-1 flex flex-col">
+<!-- Progress Bar -->
+<div class="w-full h-1 bg-surface-container-high">
+<div id="sync-progress" class="h-full bg-primary w-1/12 rounded-r-full" style="transition: width 1.5s ease-in-out;"></div>
+</div>
+<div class="p-md flex flex-col gap-lg">
+<!-- Status Card -->
+<section class="glass-card rounded-xl p-lg flex flex-col items-center justify-center text-center gap-sm relative overflow-hidden">
+<div class="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent pointer-events-none"></div>
+<div class="w-16 h-16 rounded-full bg-surface-container flex items-center justify-center mb-2 shadow-inner border border-white/5">
+<span id="status-icon" class="material-symbols-outlined text-primary text-3xl spin-slow">sync</span>
+</div>
+<p id="last-synced-text" class="font-body-md text-on-surface-variant">Last Synced: Loading...</p>
+<div class="mt-2 inline-flex items-center gap-xs px-3 py-1 rounded-full bg-secondary-container/30 border border-secondary/20">
+<span class="material-symbols-outlined text-secondary text-sm">wifi</span>
+<span class="font-label-md text-label-md text-secondary">Connected to factory Wi-Fi</span>
+</div>
+</section>
+<!-- Action Section -->
+<section class="flex flex-col gap-2">
+<button id="sync-now-btn" class="w-full rounded-xl bg-gradient-to-r from-primary to-inverse-primary p-[1px] group active:scale-[0.98] transition-transform">
+<div class="w-full h-full bg-surface-dim rounded-xl px-lg py-4 flex flex-col items-center justify-center gap-1 group-hover:bg-surface-container/50 transition-colors">
+<div class="flex items-center gap-2">
+<span id="sync-icon" class="material-symbols-outlined text-primary">cloud_upload</span>
+<span id="sync-btn-text" class="font-headline-md text-[20px] font-semibold text-primary tracking-wide">Sync Now</span>
+</div>
+<span id="sync-badge" class="font-label-md text-label-md text-on-surface-variant">Checking queue…</span>
+</div>
+</button>
+</section>
+<!-- Pending Events List -->
+<section class="flex flex-col gap-sm">
+<div class="flex justify-between items-end mb-2 px-1">
+<h2 class="font-headline-md text-[18px] text-on-surface font-semibold">Pending Events <span id="pending-count-header" class="text-on-surface-variant font-normal text-sm ml-1">(0)</span></h2>
+<button class="text-primary font-label-md text-label-md hover:underline">View All</button>
+</div>
+<div id="pending-events-container" class="flex flex-col gap-xs">
+<p class="text-sm text-on-surface-variant text-center py-4">Loading queue…</p>
+</div>
+</section>
+<!-- History Section -->
+<section class="mt-4">
+<details class="group bg-surface-container-low rounded-lg border border-white/5 overflow-hidden">
+<summary class="flex items-center justify-between p-4 cursor-pointer font-label-md text-label-md text-on-surface select-none">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-on-surface-variant text-lg">history</span>
+                            Sync History
+                        </div>
+<span class="material-symbols-outlined text-on-surface-variant group-open:rotate-180 transition-transform">expand_more</span>
+</summary>
+<div id="sync-history-container" class="p-4 pt-0 flex flex-col gap-3 border-t border-white/5 mt-1"></div>
+</details>
+</section>
+</div>
+</main>
+<div id="mobile-nav-root"></div>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  if (!window.famsApi.requireAuth()) return;
+  window.famsNav.mountMobileNav('sync');
+
+  const syncNowBtn = document.getElementById('sync-now-btn');
+  const syncBadge = document.getElementById('sync-badge');
+  const syncBtnText = document.getElementById('sync-btn-text');
+  const syncIcon = document.getElementById('sync-icon');
+  const statusIcon = document.getElementById('status-icon');
+  const syncProgress = document.getElementById('sync-progress');
+  const pendingCountHeader = document.getElementById('pending-count-header');
+  const pendingEventsContainer = document.getElementById('pending-events-container');
+  const historyContainer = document.getElementById('sync-history-container');
+
+  function formatTime(iso) {
+    return new Date(iso).toLocaleString(undefined, {
+      month: 'short', day: 'numeric',
+      hour: 'numeric', minute: '2-digit', second: '2-digit',
+    });
+  }
+
+  function renderPendingList() {
+    const pending = window.famsQueue.getPendingEvents();
+    pendingCountHeader.textContent = `(${pending.length})`;
+    syncBadge.textContent = pending.length
+      ? `${pending.length} event${pending.length === 1 ? '' : 's'} ready to upload`
+      : 'All caught up';
+
+    if (!pending.length) {
+      pendingEventsContainer.innerHTML = `
+        <div class="flex flex-col items-center justify-center p-6 text-center gap-2">
+          <span class="material-symbols-outlined text-secondary text-4xl">check_circle</span>
+          <p class="font-label-md text-on-surface">No pending scans</p>
+          <p class="text-xs text-on-surface-variant">Use the camera button to scan workers on the floor.</p>
+        </div>`;
+      setSyncedUI(true);
+      return;
+    }
+
+    setSyncedUI(false);
+    pendingEventsContainer.innerHTML = pending.slice(0, 20).map(e => `
+      <div class="glass-card rounded-lg p-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center text-primary text-xs font-bold">${window.famsUi.initialsAvatar(e.workerName)}</div>
+          <div class="flex flex-col">
+            <span class="font-label-md text-label-md text-on-surface">${e.workerName}</span>
+            <span class="text-xs text-on-surface-variant">${formatTime(e.timestamp)} · ${e.employeeCode} · ${e.method || 'face'}</span>
+          </div>
+        </div>
+        <div class="px-2 py-0.5 rounded bg-primary/20 border border-primary/30">
+          <span class="text-[11px] font-medium text-primary uppercase">Queued</span>
+        </div>
+      </div>`).join('');
+  }
+
+  function setSyncedUI(synced) {
+    if (synced) {
+      syncBtnText.textContent = 'Fully synced';
+      syncIcon.textContent = 'cloud_done';
+      syncIcon.className = 'material-symbols-outlined text-secondary';
+      statusIcon.textContent = 'check_circle';
+      statusIcon.className = 'material-symbols-outlined text-secondary text-3xl';
+      syncProgress.style.width = '100%';
+      syncProgress.className = 'h-full bg-secondary w-full rounded-r-full';
+      syncNowBtn.disabled = true;
+      syncNowBtn.classList.add('opacity-80', 'cursor-not-allowed');
+    } else {
+      syncBtnText.textContent = 'Sync now';
+      syncIcon.textContent = 'cloud_upload';
+      syncIcon.className = 'material-symbols-outlined text-primary';
+      statusIcon.textContent = 'sync';
+      statusIcon.className = 'material-symbols-outlined text-primary text-3xl spin-slow';
+      syncProgress.style.width = `${Math.min(100, 8 + window.famsQueue.getPendingCount() * 4)}%`;
+      syncProgress.className = 'h-full bg-primary rounded-r-full';
+      syncNowBtn.disabled = false;
+      syncNowBtn.classList.remove('opacity-80', 'cursor-not-allowed');
+    }
+  }
+
+  function updateLastSyncDisplay() {
+    const lastSync = localStorage.getItem('fams_last_sync');
+    const textEl = document.getElementById('last-synced-text');
+    if (!lastSync) {
+      textEl.textContent = 'Last synced: Never';
+      return;
+    }
+    const diff = Math.floor((Date.now() - new Date(lastSync).getTime()) / 1000);
+    if (diff < 10) textEl.textContent = 'Last synced: Just now';
+    else if (diff < 3600) textEl.textContent = `Last synced: ${Math.floor(diff / 60)} min ago`;
+    else textEl.textContent = `Last synced: ${new Date(lastSync).toLocaleString()}`;
+  }
+
+  function prependHistory(ok, detail) {
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-3 text-sm';
+    row.innerHTML = `
+      <span class="material-symbols-outlined ${ok ? 'text-secondary' : 'text-error'} text-base">${ok ? 'check_circle' : 'error'}</span>
+      <span class="text-on-surface-variant flex-1">${new Date().toLocaleString()}</span>
+      <span class="${ok ? 'text-secondary' : 'text-error'} text-xs">${detail}</span>`;
+    historyContainer.insertBefore(row, historyContainer.firstChild);
+  }
+
+  renderPendingList();
+  updateLastSyncDisplay();
+  setInterval(updateLastSyncDisplay, 5000);
+  window.addEventListener('fams-queue-changed', renderPendingList);
+
+  syncNowBtn.addEventListener('click', async () => {
+    syncNowBtn.disabled = true;
+    syncBtnText.textContent = 'Syncing…';
+    statusIcon.classList.add('animate-spin');
+    try {
+      const result = await window.famsApi.fullSync();
+      const merged = result.push?.merged ?? 0;
+      const faces = result.pull?.faceCount ?? 0;
+      window.famsUi.showToast(`Pulled ${faces} faces · uploaded ${merged} scans`, 'success');
+      prependHistory(true, `${merged} uploaded, ${faces} faces`);
+      renderPendingList();
+      updateLastSyncDisplay();
+    } catch (err) {
+      window.famsUi.showToast(err.message, 'error');
+      prependHistory(false, err.message || 'Failed');
+      setSyncedUI(false);
+    } finally {
+      statusIcon.classList.remove('animate-spin');
+      syncNowBtn.disabled = false;
+    }
+  });
+});
+</script>
+</body></html>

@@ -1,0 +1,13 @@
+node_modules
+npm-debug.log
+.env
+.git
+.gitignore
+README.md
+*.md
+dist
+# Don't need tests or editor configs in the image
+*.test.ts
+.vscode
+.idea
+cleanup.ts

@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Device Pairing Setup - FAMS Mobile</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        /* Custom styles for animations and specific components */
+        @keyframes pulse-border {
+            0% { border-color: rgba(0, 212, 255, 0.4); }
+            50% { border-color: rgba(0, 212, 255, 1); }
+            100% { border-color: rgba(0, 212, 255, 0.4); }
+        }
+        .scanner-corner {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border-color: white;
+            border-style: solid;
+        }
+        .corner-tl { top: 0; left: 0; border-width: 4px 0 0 4px; border-radius: 12px 0 0 0; }
+        .corner-tr { top: 0; right: 0; border-width: 4px 4px 0 0; border-radius: 0 12px 0 0; }
+        .corner-bl { bottom: 0; left: 0; border-width: 0 0 4px 4px; border-radius: 0 0 0 12px; }
+        .corner-br { bottom: 0; right: 0; border-width: 0 4px 4px 0; border-radius: 0 0 12px 0; }
+        
+        .scan-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #00D4FF, transparent);
+            box-shadow: 0 0 10px #00D4FF;
+            animation: scan 2s linear infinite;
+        }
+        
+        @keyframes scan {
+            0% { top: 10%; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { top: 90%; opacity: 0; }
+        }
+        
+        .glass-panel {
+            background: rgba(0, 28, 40, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .btn-gradient {
+            background: linear-gradient(135deg, #00D4FF 0%, #0072FF 100%);
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed": "#ff9195",
+                        "on-primary-fixed-variant": "#004c5d",
+                        "on-tertiary-container": "#000000",
+                        "on-primary-container": "#004352",
+                        "on-tertiary": "#49000d",
+                        "surface-container": "#001c28",
+                        "secondary": "#3fff8b",
+                        "on-tertiary-fixed-variant": "#79001c",
+                        "primary-container": "#00d2fd",
+                        "secondary-container": "#006d35",
+                        "on-secondary": "#005d2c",
+                        "on-error": "#490006",
+                        "primary-fixed-dim": "#00c3eb",
+                        "on-secondary-fixed": "#004820",
+                        "error": "#ff716c",
+                        "on-surface-variant": "#84b1ca",
+                        "surface": "#001019",
+                        "on-secondary-container": "#e3ffe4",
+                        "inverse-on-surface": "#2c5a70",
+                        "on-surface": "#c7ebff",
+                        "on-background": "#c7ebff",
+                        "error-container": "#9f0519",
+                        "surface-container-lowest": "#000000",
+                        "surface-container-low": "#001620",
+                        "surface-bright": "#003042",
+                        "tertiary-fixed-dim": "#ff7981",
+                        "secondary-fixed": "#3fff8b",
+                        "outline": "#4e7b92",
+                        "secondary-dim": "#24f07e",
+                        "tertiary-dim": "#ff6f78",
+                        "surface-container-highest": "#002939",
+                        "surface-container-high": "#002330",
+                        "on-primary-fixed": "#002c37",
+                        "on-tertiary-fixed": "#390008",
+                        "tertiary": "#ff6f78",
+                        "inverse-surface": "#f4faff",
+                        "tertiary-container": "#fe3c56",
+                        "secondary-fixed-dim": "#24f07e",
+                        "inverse-primary": "#00687e",
+                        "outline-variant": "#1c4d62",
+                        "primary-fixed": "#00d2fd",
+                        "error-dim": "#d7383b",
+                        "surface-variant": "#002939",
+                        "primary-dim": "#00c3eb",
+                        "primary": "#6dddff",
+                        "surface-tint": "#6dddff",
+                        "on-primary": "#004c5e",
+                        "surface-dim": "#001019",
+                        "on-secondary-fixed-variant": "#006832",
+                        "on-error-container": "#ffa8a3",
+                        "background": "#001019",
+                        "btn-cyan": "#00D4FF"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px",
+                        "2xl": "1rem"
+                    },
+                    "spacing": {
+                        "xl": "32px",
+                        "sm": "8px",
+                        "md": "16px",
+                        "base": "8px",
+                        "xs": "4px",
+                        "lg": "24px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Inter"],
+                        "label-md": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "body-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["32px", { "lineHeight": "40px", "fontWeight": "700" }],
+                        "label-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0.1px", "fontWeight": "500" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="../js/api.js"></script>
+    <script src="../js/ui.js"></script>
+</head>
+<body class="bg-surface text-on-surface min-h-screen flex flex-col font-body-md antialiased selection:bg-primary selection:text-on-primary">
+<!-- TopAppBar -->
+<header class="fixed top-0 full-width w-full h-16 z-50 flex justify-between items-center px-md bg-surface/80 backdrop-blur-md dark:bg-surface/80 border-b border-white/10 transition-all duration-200">
+<button id="back-btn" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/5 active:scale-95 text-on-surface-variant transition-colors group">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors" data-icon="arrow_back">arrow_back</span>
+</button>
+<h1 class="text-headline-md font-headline-md text-primary tracking-tight">Device Pairing</h1>
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/5 active:scale-95 text-on-surface-variant transition-colors group">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors" data-icon="help_outline">help_outline</span>
+</button>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-grow pt-[80px] pb-[96px] px-md flex flex-col items-center max-w-lg mx-auto w-full relative z-10">
+<!-- Header Section -->
+<div class="flex flex-col items-center mb-xl w-full">
+<!-- Small Brand Logo -->
+<div class="w-12 h-12 rounded-xl mb-6 overflow-hidden border border-white/10 glass-panel flex items-center justify-center bg-surface-container">
+<img alt="" class="w-full h-full object-cover p-1" src="https://lh3.googleusercontent.com/aida/ADBb0uhmckcFMMf_h37HAvfPGUj1LxpXOktiqm4FfXYy0DrMYlFJb6WWTa5SoSiyhzwoiUPuxyK9MaL6x7RptxNj-l_q-6H2GjA2c5NESkLBfKhPO_8DUG76mIlrxbTfkwcvlOB3OSyhS1oFWenP_522tCPN1wt2PfBRJTw2W5TrFVcf-moiEXfFuP6gZEOPVp8I8UlRg4tYGCIMre2hn6nLJUSm7pJnQ-bWZOv0xh4jKMmFhPLVlZDK3DLZj-M"/>
+</div>
+<!-- Step Indicator -->
+<div class="flex items-center gap-2 mb-6">
+<div class="w-2 h-2 rounded-full bg-on-surface-variant/40"></div>
+<div class="w-8 h-2 rounded-full bg-btn-cyan shadow-[0_0_8px_rgba(0,212,255,0.6)]"></div>
+<div class="w-2 h-2 rounded-full bg-on-surface-variant/40"></div>
+</div>
+<h2 class="text-headline-lg font-headline-lg text-white mb-2 text-center">Pair Your Device</h2>
+<p class="text-body-md font-body-md text-on-surface-variant text-center max-w-[280px]">Scan the QR code on your FAMS web dashboard, or type the pairing code</p>
+</div>
+<!-- Scanner Viewfinder -->
+<div class="relative w-64 h-64 mb-xl mx-auto">
+<!-- Simulated Camera Feed Background -->
+<div class="absolute inset-0 rounded-2xl overflow-hidden glass-panel flex items-center justify-center">
+<div class="absolute inset-0 opacity-20" style="background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.05) 10px, rgba(255,255,255,0.05) 20px);"></div>
+<span class="material-symbols-outlined text-white/20 text-[64px]" data-icon="qr_code_scanner">qr_code_scanner</span>
+</div>
+<!-- Corners -->
+<div class="scanner-corner corner-tl"></div>
+<div class="scanner-corner corner-tr"></div>
+<div class="scanner-corner corner-bl"></div>
+<div class="scanner-corner corner-br"></div>
+<!-- Scan Line -->
+<div class="scan-line"></div>
+</div>
+<!-- Divider -->
+<div class="flex items-center w-full max-w-[320px] mb-lg opacity-50">
+<div class="flex-grow h-px bg-on-surface-variant"></div>
+<span class="px-4 text-label-md font-label-md text-on-surface-variant uppercase tracking-widest">or</span>
+<div class="flex-grow h-px bg-on-surface-variant"></div>
+</div>
+<!-- Code Input -->
+<div class="w-full max-w-[340px] mb-xl">
+<div class="flex justify-between gap-2 w-full" id="pairing-inputs">
+<input class="w-12 h-14 text-center text-headline-md font-headline-md text-white bg-surface-container/80 backdrop-blur-md border border-white/10 rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1"/>
+<input class="w-12 h-14 text-center text-headline-md font-headline-md text-white bg-surface-container/80 backdrop-blur-md border border-white/10 rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1"/>
+<input class="w-12 h-14 text-center text-headline-md font-headline-md text-white bg-surface-container/80 backdrop-blur-md border border-white/10 rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1"/>
+<input class="w-12 h-14 text-center text-headline-md font-headline-md text-white bg-surface-container/80 backdrop-blur-md border border-white/10 rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1"/>
+<input class="w-12 h-14 text-center text-headline-md font-headline-md text-white bg-surface-container/80 backdrop-blur-md border border-white/10 rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1"/>
+<input class="w-12 h-14 text-center text-headline-md font-headline-md text-white bg-surface-container/80 backdrop-blur-md border border-white/10 rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1"/>
+</div>
+</div>
+<!-- Action Area -->
+<div class="w-full max-w-[340px] mt-auto flex flex-col items-center gap-6">
+<button id="verify-btn" class="w-full h-14 rounded-xl btn-gradient text-white text-body-md font-headline-md shadow-[0_4px_14px_rgba(0,212,255,0.39)] hover:shadow-[0_6px_20px_rgba(0,212,255,0.5)] active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 group">
+<span class="material-symbols-outlined" data-icon="lock_open">lock_open</span>
+                Verify Code
+            </button>
+<button class="text-btn-cyan text-label-md font-label-md hover:underline hover:text-white transition-colors duration-200 bg-transparent border-none p-2" type="button" onclick="window.location.href='../server_setup/code.html'">
+                Change server address
+            </button>
+</div>
+</main>
+<!-- BottomNavBar -->
+<!-- Note: Suppressed because this is a transactional/onboarding flow (Step 2 of 3), as per the Semantic Shell Mandate -->
+<!-- Ambient Background Effects -->
+<div class="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+<div class="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-btn-cyan/5 blur-[120px]"></div>
+<div class="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] rounded-full bg-[#0072FF]/5 blur-[150px]"></div>
+</div>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!window.famsApi.hasServerConfigured()) {
+            window.location.href = '../server_setup/code.html';
+            return;
+        }
+        if (window.famsApi.isPaired()) {
+            window.location.href = '../kiosk/code.html';
+            return;
+        }
+
+        // Wire back button
+        const backBtn = document.getElementById('back-btn');
+        if (backBtn) {
+            backBtn.addEventListener('click', () => {
+                window.location.href = '../supervisor_login/code.html';
+            });
+        }
+
+        // Handle numeric input typing & autofocus
+        const inputs = document.querySelectorAll('#pairing-inputs input');
+        
+        inputs.forEach((input, index) => {
+            // Restrict input to digits only
+            input.addEventListener('keypress', (e) => {
+                if (!/[0-9]/.test(e.key)) {
+                    e.preventDefault();
+                }
+            });
+
+            input.addEventListener('input', (e) => {
+                const val = e.target.value;
+                // Double check it's a number
+                if (!/^[0-9]$/.test(val) && val !== '') {
+                    e.target.value = '';
+                    return;
+                }
+
+                if (val.length === 1) {
+                    if (index < inputs.length - 1) {
+                        inputs[index + 1].focus();
+                    } else {
+                        // All 6 digits filled! Auto-verify pairing
+                        verifyPairingCode();
+                    }
+                }
+            });
+
+            // Focus management on backspace
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Backspace') {
+                    if (e.target.value === '') {
+                        if (index > 0) {
+                            inputs[index - 1].focus();
+                            inputs[index - 1].value = ''; // Clear previous input on backspace
+                        }
+                    } else {
+                        e.target.value = '';
+                    }
+                    e.preventDefault();
+                }
+            });
+        });
+
+        const verifyBtn = document.getElementById('verify-btn');
+        verifyBtn.addEventListener('click', verifyPairingCode);
+
+        async function verifyPairingCode() {
+            let code = '';
+            inputs.forEach(input => code += input.value);
+            
+            if (code.length !== 6) {
+                window.famsUi.showToast('Enter all 6 digits', 'error');
+                return;
+            }
+
+            const idleHtml = verifyBtn.innerHTML;
+            try {
+                window.famsUi.setButtonLoading(verifyBtn, true);
+
+                const res = await window.famsApi.pairTerminal(code);
+                window.famsUi.showToast(`Paired as ${res.name}`, 'success');
+                setTimeout(() => {
+                    window.location.href = '../kiosk/code.html';
+                }, 600);
+            } catch (error) {
+                window.famsUi.showToast(error.message || 'Pairing failed', 'error');
+                window.famsUi.setButtonLoading(verifyBtn, false, idleHtml);
+            }
+        }
+    });
+</script>
+</body></html>
