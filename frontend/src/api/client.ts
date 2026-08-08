@@ -25,7 +25,7 @@ async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T>
   if (!response.ok) {
     if (response.status === 401) {
       localStorage.removeItem('fams_user');
-      const publicPaths = ['/login', '/setup', '/forgot-password', '/kiosk'];
+      const publicPaths = ['/', '/login', '/setup', '/forgot-password', '/kiosk'];
       if (!publicPaths.includes(window.location.pathname)) {
         window.location.href = '/login';
       }
@@ -52,6 +52,8 @@ export type AuthUser = {
   hasSeenOnboarding?: boolean;
   hasPassword?: boolean;
   authProvider?: string;
+  mfaEnabled?: boolean;
+  mfaEnrollmentSuggested?: boolean;
 };
 
 export const login = (username: string, password: string, otp?: string) =>
@@ -60,10 +62,10 @@ export const login = (username: string, password: string, otp?: string) =>
     body: JSON.stringify({ username, password, otp }),
   });
 
-export const googleLogin = (credential: string) =>
+export const googleLogin = (credential: string, otp?: string) =>
   fetchJson<{ token: string; user: AuthUser }>('/auth/google', {
     method: 'POST',
-    body: JSON.stringify({ credential }),
+    body: JSON.stringify({ credential, otp }),
   });
 
 /** Unlock a remote PWA/phone kiosk with an authorized Google admin account. */
@@ -73,6 +75,16 @@ export const kioskGooglePair = (credential: string) =>
     body: JSON.stringify({ credential }),
   });
 
+export type PublicAuthConfig = {
+  googleEnabled: boolean;
+  googleClientId: string | null;
+  siteName: string | null;
+};
+
+export const getAuthConfig = () =>
+  fetchJson<PublicAuthConfig>('/auth/config');
+
+// Retained for kiosk pairing until that flow adopts the public auth config.
 export const getGoogleClientId = () =>
   fetchJson<{ clientId: string | null }>('/auth/google-client-id');
 
@@ -106,6 +118,18 @@ export const deleteUser = (id: string) =>
 
 export const changePassword = (data: any) =>
   fetchJson<any>('/auth/change-password', { method: 'POST', body: JSON.stringify(data) });
+
+export const setupMfa = () =>
+  fetchJson<{ secret: string; otpauthUrl: string }>('/auth/mfa/setup', { method: 'POST' });
+
+export const enableMfa = (otp: string) =>
+  fetchJson<{ message: string }>('/auth/mfa/enable', {
+    method: 'POST',
+    body: JSON.stringify({ otp }),
+  });
+
+export const disableMfa = () =>
+  fetchJson<{ message: string }>('/auth/mfa/disable', { method: 'POST' });
 
 // --- Workers ---
 export interface Shift {
@@ -144,14 +168,25 @@ export const updateWorker = (employeeCode: string, data: Partial<Worker>) =>
 export const deleteWorker = (employeeCode: string) =>
   fetchJson<{ message: string }>(`/workers/${employeeCode}`, { method: 'DELETE' });
 
-export const registerFace = (employeeCode: string, faceDescriptor: number[], avatarPhoto?: string) =>
-  fetchJson<{ message: string }>(`/workers/${employeeCode}/face`, {
+export const registerFace = (
+  employeeCode: string,
+  faceDescriptor: number[] | number[][],
+  avatarPhoto?: string,
+) =>
+  fetchJson<{ message: string; samples?: number }>(`/workers/${employeeCode}/face`, {
     method: 'PATCH',
     body: JSON.stringify({ faceDescriptor, avatarPhoto }),
   });
 
 export const getFaceDescriptors = () =>
-  fetchJson<Array<{ employeeCode: string; name: string; descriptor: number[] }>>('/workers/faces');
+  fetchJson<
+    Array<{
+      employeeCode: string;
+      name: string;
+      descriptor: number[];
+      descriptors?: number[][];
+    }>
+  >('/workers/faces');
 
 // --- Attendance ---
 export const logAttendance = (data: { employeeCode: string; eventType: string; method?: string; confidence?: number; clientEventId?: string; occurredAt?: string }) =>
@@ -353,11 +388,14 @@ export interface SalaryRecord {
   dailyWage: number;
   overtimeRate: number;
   daysPresent: number;
+  incompleteDays?: number;
   totalRegularHours?: number;
   baseSalary: number;
   overtimeHours: number;
   overtimePay: number;
-  salary: number; // Total Payout
+  salary: number; // Gross payout
+  tax?: number;
+  net?: number;
   isActive: boolean;
   dailyBreakdown: Array<{
     date: string;
@@ -367,6 +405,8 @@ export interface SalaryRecord {
     regularPay: number;
     overtimePay: number;
     dayPay: number;
+    tax?: number;
+    net?: number;
     status: 'complete' | 'incomplete' | 'absent';
     isOverridden: boolean;
   }>;
@@ -374,7 +414,16 @@ export interface SalaryRecord {
 
 export interface SalaryReportData {
   month: string;
+  from?: string;
+  to?: string;
+  currency?: string;
   totalPayout: number;
+  totalTax?: number;
+  totalNet?: number;
+  incompleteDayCount?: number;
+  finalized?: boolean;
+  finalizedAt?: string | null;
+  finalizedExportId?: string | null;
   records: SalaryRecord[];
 }
 
@@ -391,6 +440,12 @@ export const saveSalaryOverride = (data: {
 }) =>
   fetchJson<any>('/report/salary/override', {
     method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const clearSalaryOverride = (data: { employeeCode: string; date: string }) =>
+  fetchJson<any>('/report/salary/override', {
+    method: 'DELETE',
     body: JSON.stringify(data),
   });
 
@@ -548,6 +603,12 @@ export interface PayrollExportRecord {
   format: string;
   workerCount: number;
   status: string;
+  finalizedAt?: string | null;
+  from?: string;
+  to?: string;
+  incompleteDayCount?: number;
+  totalPayout?: number;
+  totalNet?: number;
 }
 
 export const getSettings = () => fetchJson<SystemSettings>('/settings');
@@ -564,10 +625,22 @@ export const purgeAudit = () => fetchJson<{ message: string }>('/settings/purge-
 
 export const getPayrollExports = () => fetchJson<PayrollExportRecord[]>('/settings/payroll-exports');
 
-export const createPayrollExport = (period: string, format: string) =>
+export const createPayrollExport = (data: {
+  period?: string;
+  month?: string;
+  from?: string;
+  to?: string;
+  format?: string;
+  finalize?: boolean;
+}) =>
   fetchJson<PayrollExportRecord>('/settings/payroll-exports', {
     method: 'POST',
-    body: JSON.stringify({ period, format }),
+    body: JSON.stringify({ format: 'csv', finalize: true, ...data }),
+  });
+
+export const unfinalizePayrollExport = (exportId: string) =>
+  fetchJson<PayrollExportRecord>(`/settings/payroll-exports/${exportId}/unfinalize`, {
+    method: 'POST',
   });
 
 export const downloadPayrollExport = async (exportId: string) => {

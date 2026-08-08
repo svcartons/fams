@@ -29,7 +29,39 @@ type AuthUserPayload = {
   hasSeenOnboarding: boolean;
   passwordHash?: string | null;
   authProvider?: string | null;
+  mfaEnabled?: boolean;
+  mfaSecret?: string | null;
 };
+
+async function isOrgMfaEnabled(): Promise<boolean> {
+  try {
+    const setting = await prisma.systemSetting.findUnique({ where: { key: 'sec_mfa_enabled' } });
+    return setting?.value === 'true';
+  } catch {
+    return false;
+  }
+}
+
+/** When the user has MFA enrolled, require a valid TOTP before issuing a session. */
+function enforceEnrolledMfa(
+  res: Response,
+  user: { mfaEnabled?: boolean; mfaSecret?: string | null },
+  otp: unknown
+): boolean {
+  if (!user.mfaEnabled) return false;
+  if (!otp) {
+    res.status(401).json({
+      error: 'MFA_REQUIRED: Enter your authenticator code',
+      code: 'MFA_REQUIRED',
+    });
+    return true;
+  }
+  if (!user.mfaSecret || !verifyTotp(user.mfaSecret, String(otp))) {
+    res.status(401).json({ error: 'Invalid authenticator code', code: 'MFA_INVALID' });
+    return true;
+  }
+  return false;
+}
 
 async function issueAuthResponse(res: Response, user: AuthUserPayload) {
   const jwtExpirySetting = await prisma.systemSetting.findUnique({ where: { key: 'sec_jwt_expiry' } });
@@ -43,6 +75,10 @@ async function issueAuthResponse(res: Response, user: AuthUserPayload) {
 
   setSessionCookie(res, token);
 
+  const orgMfa = await isOrgMfaEnabled();
+  const privileged = ['admin', 'hr', 'supervisor'].includes(user.role);
+  const mfaEnrollmentSuggested = orgMfa && privileged && !user.mfaEnabled;
+
   return res.json({
     token,
     user: {
@@ -54,6 +90,8 @@ async function issueAuthResponse(res: Response, user: AuthUserPayload) {
       hasSeenOnboarding: user.hasSeenOnboarding,
       hasPassword: !!user.passwordHash,
       authProvider: user.authProvider || 'local',
+      mfaEnabled: !!user.mfaEnabled,
+      mfaEnrollmentSuggested,
     },
   });
 }
@@ -150,12 +188,7 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    if (user!.mfaEnabled) {
-      if (!otp) return res.status(401).json({ error: 'MFA_REQUIRED: Enter your authenticator code', code: 'MFA_REQUIRED' });
-      if (!user!.mfaSecret || !verifyTotp(user!.mfaSecret, String(otp))) {
-        return res.status(401).json({ error: 'Invalid authenticator code', code: 'MFA_INVALID' });
-      }
-    }
+    if (enforceEnrolledMfa(res, user!, otp)) return;
 
     // Success: Reset rate limit
     loginAttempts.delete(ip);
@@ -166,7 +199,16 @@ router.post('/login', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/auth/google-client-id — public; frontend loads GIS without rebuild
+// Public, deliberately narrow auth display configuration.
+router.get('/config', (_req: Request, res: Response) => {
+  const siteName = (process.env.FAMS_SITE_NAME || '').trim();
+  res.json({
+    googleEnabled: Boolean(GOOGLE_CLIENT_ID),
+    googleClientId: GOOGLE_CLIENT_ID || null,
+    siteName: siteName || null,
+  });
+});
+
 router.get('/google-client-id', (_req: Request, res: Response) => {
   res.json({ clientId: GOOGLE_CLIENT_ID || null });
 });
@@ -180,7 +222,7 @@ router.post('/google', async (req: Request, res: Response) => {
       });
     }
 
-    const { credential } = req.body || {};
+    const { credential, otp } = req.body || {};
     if (!credential || typeof credential !== 'string') {
       return res.status(400).json({ error: 'Google credential required' });
     }
@@ -274,6 +316,8 @@ router.post('/google', async (req: Request, res: Response) => {
     } else {
       return res.status(403).json({ error: 'This Google account is not authorized for FAMS' });
     }
+
+    if (enforceEnrolledMfa(res, user, otp)) return;
 
     return issueAuthResponse(res, user);
   } catch (err: any) {
@@ -376,9 +420,12 @@ router.get('/session', authenticateToken, async (req: Request, res: Response) =>
       hasSeenOnboarding: true,
       passwordHash: true,
       authProvider: true,
+      mfaEnabled: true,
     },
   });
   if (!user) return res.status(401).json({ error: 'Session user not found' });
+  const orgMfa = await isOrgMfaEnabled();
+  const privileged = ['admin', 'hr', 'supervisor'].includes(user.role);
   res.json({
     user: {
       id: user.id,
@@ -389,13 +436,17 @@ router.get('/session', authenticateToken, async (req: Request, res: Response) =>
       hasSeenOnboarding: user.hasSeenOnboarding,
       hasPassword: !!user.passwordHash,
       authProvider: user.authProvider || 'local',
+      mfaEnabled: user.mfaEnabled,
+      mfaEnrollmentSuggested: orgMfa && privileged && !user.mfaEnabled,
     },
   });
 });
 
 router.post('/mfa/setup', authenticateToken, async (req: Request, res: Response) => {
   const authUser = (req as any).user;
-  if (!['admin', 'hr'].includes(authUser?.role)) return res.status(403).json({ error: 'MFA setup requires a privileged user' });
+  if (!['admin', 'hr', 'supervisor'].includes(authUser?.role)) {
+    return res.status(403).json({ error: 'MFA setup requires a privileged user' });
+  }
   const secret = generateTotpSecret();
   await prisma.user.update({ where: { id: authUser.id }, data: { mfaSecret: secret, mfaEnabled: false } });
   const issuer = encodeURIComponent('FAMS');
@@ -415,7 +466,8 @@ router.post('/mfa/enable', authenticateToken, async (req: Request, res: Response
 
 router.post('/mfa/disable', authenticateToken, async (req: Request, res: Response) => {
   const authUser = (req as any).user;
-  if (authUser?.role !== 'admin') return res.status(403).json({ error: 'Only administrators can disable MFA' });
+  // Users may disable their own MFA; admins may disable any (currently self-only endpoint).
+  if (!authUser?.id) return res.status(401).json({ error: 'Access token required' });
   await prisma.user.update({ where: { id: authUser.id }, data: { mfaEnabled: false, mfaSecret: null } });
   res.json({ message: 'MFA disabled' });
 });

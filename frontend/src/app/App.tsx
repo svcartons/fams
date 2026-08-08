@@ -15,10 +15,11 @@ const Settings = React.lazy(() => import('./components/Settings').then(m => ({ d
 const KioskMode = React.lazy(() => import('./components/KioskMode').then(m => ({ default: m.KioskMode })));
 const ForgotPassword = React.lazy(() => import('./components/ForgotPassword').then(m => ({ default: m.ForgotPassword })));
 const Setup = React.lazy(() => import('./components/Setup').then(m => ({ default: m.Setup })));
+const Welcome = React.lazy(() => import('./components/Welcome').then(m => ({ default: m.Welcome })));
 
 function AuthRedirect({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
-  if (isAuthenticated) return <Navigate to="/" replace />;
+  if (isAuthenticated) return <Navigate to="/today" replace />;
   return <>{children}</>;
 }
 
@@ -64,14 +65,15 @@ export default function App() {
       <Toaster position="top-right" richColors toastOptions={{ style: { fontSize: '13px', borderRadius: '6px' } }} />
       <Suspense fallback={<PageLoader />}>
         <Routes>
+          <Route path="/" element={<Welcome />} />
           <Route path="/login" element={<AuthRedirect><Login /></AuthRedirect>} />
           <Route path="/forgot-password" element={<AuthRedirect><ForgotPassword /></AuthRedirect>} />
           <Route path="/setup" element={<AuthRedirect><Setup /></AuthRedirect>} />
           <Route path="/kiosk" element={<div className="size-full bg-white"><KioskMode /></div>} />
 
           <Route element={<ProtectedShell />}>
-            <Route path="/" element={<Today />} />
-            <Route path="/live" element={<Navigate to="/" replace />} />
+            <Route path="/today" element={<Today />} />
+            <Route path="/live" element={<Navigate to="/today" replace />} />
             <Route path="/workers" element={<WorkerDirectory />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/daily-report" element={<Navigate to="/reports?tab=attendance" replace />} />

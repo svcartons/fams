@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { setupAdmin } from '../../api/client';
 import { toast } from 'sonner';
 import { User, Lock, Key, Eye, EyeOff } from 'lucide-react';
-import { AuthLayout, AuthField, AuthInput, AuthSubmit } from './layout/AuthLayout';
+import { AuthLayout, AuthField, AuthInput, AuthNotice, AuthSubmit } from './layout/AuthLayout';
 
 export function Setup() {
   const [formData, setFormData] = useState({ username: '', password: '', name: '' });
@@ -32,7 +32,7 @@ export function Setup() {
   return (
     <AuthLayout
       title="System setup"
-      subtitle="Create the primary administrator account. This screen is only available when no users exist."
+      subtitle="Create the first administrator account for this FAMS installation."
     >
       <form onSubmit={handleSubmit}>
         <AuthField label="Admin name">
@@ -72,9 +72,7 @@ export function Setup() {
         </AuthField>
         <AuthSubmit loading={loading}>Complete setup</AuthSubmit>
       </form>
-      <p className="fams-settings-hint mt-4 text-center">
-        Password must be at least 12 characters.
-      </p>
+      <AuthNotice>Password must be at least 12 characters. This setup screen closes after the first account is created.</AuthNotice>
     </AuthLayout>
   );
 }

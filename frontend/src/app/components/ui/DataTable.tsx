@@ -102,7 +102,7 @@ export function DataTable<T>({
                 value={search.value}
                 onChange={e => search.onChange(e.target.value)}
                 data-tour={search['data-tour']}
-                className="fams-input pl-9"
+                className="fams-input fams-input-with-icon"
               />
             </div>
           )}

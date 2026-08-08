@@ -5,7 +5,7 @@ import { useAuth } from '../hooks/useAuth';
 import { getCorrections } from '../../api/client';
 
 const SUPERVISOR_NAV = [
-  { to: '/', label: 'Today', icon: LayoutDashboard, end: true },
+  { to: '/today', label: 'Today', icon: LayoutDashboard, end: true },
   { to: '/workers', label: 'Workers', icon: Users },
   { to: '/reports', label: 'Reports', icon: FileText },
   { to: '/corrections', label: 'Corrections', icon: Edit, showPending: true },
@@ -64,13 +64,13 @@ export function Navigation() {
 
   const mobileItems = isAdmin
     ? [
-        { to: '/', label: 'Today', icon: LayoutDashboard, end: true },
+        { to: '/today', label: 'Today', icon: LayoutDashboard, end: true },
         { to: '/workers', label: 'Workers', icon: Users },
         { to: '/reports', label: 'Reports', icon: FileText },
         { to: '/corrections', label: 'Fix', icon: Edit, badge: pendingCorrections },
       ]
     : [
-        { to: '/', label: 'Today', icon: LayoutDashboard, end: true },
+        { to: '/today', label: 'Today', icon: LayoutDashboard, end: true },
         { to: '/workers', label: 'Workers', icon: Users },
         { to: '/reports', label: 'Reports', icon: FileText },
         { to: '/corrections', label: 'Fix', icon: Edit, badge: pendingCorrections },

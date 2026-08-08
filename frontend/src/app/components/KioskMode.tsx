@@ -31,6 +31,7 @@ import {
   getQueuedEvents,
   removeQueuedByClientEventIds,
 } from '../utils/kioskOfflineQueue';
+import { assessFaceQuality } from '../utils/faceQuality';
 
 const cameraConstraints: Record<string, MediaTrackConstraints> = {
   '480p': { width: { ideal: 640 }, height: { ideal: 480 } },
@@ -97,27 +98,27 @@ type KioskRuntimeSettings = {
 };
 
 const defaultRuntime: KioskRuntimeSettings = {
-  threshold: 0.6,
+  threshold: 0.55,
   scanIntervalMs: 800,
   idleTimeoutSec: 30,
   cameraRes: '720p',
   offlineMode: false,
   useLandmarks: true,
   useTinyDetector: false,
-  multifaceAlert: false,
+  multifaceAlert: true,
   autoRetry: 3,
 };
 
 function parseRuntimeSettings(settings: Partial<SystemSettings>): KioskRuntimeSettings {
   return {
-    threshold: parseFloat(settings.ai_threshold || '0.6') || 0.6,
+    threshold: parseFloat(settings.ai_threshold || '0.55') || 0.55,
     scanIntervalMs: Number(settings.ai_scan_interval || 800) || 800,
     idleTimeoutSec: Number(settings.kiosk_idle_timeout || 30) || 30,
     cameraRes: settings.kiosk_camera_res || '720p',
     offlineMode: settings.kiosk_offline_mode === 'true',
-    useLandmarks: settings.ai_landmarks !== 'false',
+    useLandmarks: true, // always on for accurate alignment
     useTinyDetector: settings.ai_model === 'tiny_face',
-    multifaceAlert: settings.ai_multiface_alert === 'true',
+    multifaceAlert: settings.ai_multiface_alert !== 'false',
     autoRetry: Math.max(0, Number(settings.ai_auto_retry || 3) || 0),
   };
 }
@@ -139,6 +140,8 @@ export function KioskMode() {
   const faceMatcherRef = useRef<faceapi.FaceMatcher | null>(null);
   const nameByCodeRef = useRef<Map<string, string>>(new Map());
   const lastScanRef = useRef<{ employeeCode: string; time: number } | null>(null);
+  const pendingConfirmRef = useRef<{ employeeCode: string; count: number; at: number } | null>(null);
+  const qualityHintAtRef = useRef(0);
   const resetTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const statusRef = useRef<KioskStatus>('loading');
   const initStartedRef = useRef(false);
@@ -230,14 +233,31 @@ export function KioskMode() {
 
   const buildMatcher = useCallback(
     (
-      descriptors: Array<{ employeeCode: string; name: string; descriptor: number[] }>,
+      descriptors: Array<{
+        employeeCode: string;
+        name: string;
+        descriptor: number[];
+        descriptors?: number[][];
+      }>,
       threshold: number
     ) => {
       const names = new Map<string, string>();
-      const labeled = descriptors.map((d) => {
-        names.set(d.employeeCode, d.name);
-        return new faceapi.LabeledFaceDescriptors(d.employeeCode, [new Float32Array(d.descriptor)]);
-      });
+      const labeled = descriptors
+        .map((d) => {
+          names.set(d.employeeCode, d.name);
+          const vectors = (d.descriptors && d.descriptors.length > 0
+            ? d.descriptors
+            : d.descriptor
+              ? [d.descriptor]
+              : []
+          ).filter((v) => Array.isArray(v) && v.length === 128);
+          if (vectors.length === 0) return null;
+          return new faceapi.LabeledFaceDescriptors(
+            d.employeeCode,
+            vectors.map((v) => new Float32Array(v)),
+          );
+        })
+        .filter((x): x is faceapi.LabeledFaceDescriptors => !!x);
       nameByCodeRef.current = names;
       const matcher = new faceapi.FaceMatcher(labeled, threshold);
       faceMatcherRef.current = matcher;
@@ -304,7 +324,7 @@ export function KioskMode() {
           forceRePair('Kiosk token was regenerated or revoked. Unlock this device again.');
           return;
         }
-        settings = { ai_threshold: '0.6' };
+        settings = { ai_threshold: '0.55', ai_multiface_alert: 'true' };
       }
 
       ensureKioskToken(settings.sec_kiosk_token);
@@ -480,11 +500,14 @@ export function KioskMode() {
       : new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 });
 
     if (rt.multifaceAlert) {
-      const all = rt.useLandmarks
-        ? await faceapi.detectAllFaces(video, options).withFaceLandmarks().withFaceDescriptors()
-        : await faceapi.detectAllFaces(video, options).withFaceLandmarks().withFaceDescriptors();
+      const all = await faceapi.detectAllFaces(video, options).withFaceLandmarks().withFaceDescriptors();
       if (all.length > 1) return { kind: 'multiface' as const };
       if (all.length === 0) return { kind: 'none' as const };
+      const quality = assessFaceQuality(all[0], video.videoWidth, video.videoHeight, {
+        minFaceRatio: 0.16,
+        minScore: 0.5,
+      });
+      if (!quality.ok) return { kind: 'quality' as const, message: quality.message };
       return { kind: 'match' as const, detection: all[0] };
     }
 
@@ -493,6 +516,11 @@ export function KioskMode() {
       .withFaceLandmarks()
       .withFaceDescriptor();
     if (!detection) return { kind: 'none' as const };
+    const quality = assessFaceQuality(detection, video.videoWidth, video.videoHeight, {
+      minFaceRatio: 0.16,
+      minScore: 0.5,
+    });
+    if (!quality.ok) return { kind: 'quality' as const, message: quality.message };
     return { kind: 'match' as const, detection };
   }, []);
 
@@ -505,9 +533,23 @@ export function KioskMode() {
 
       try {
         const result = await runDetect(videoRef.current);
-        if (result.kind === 'none') return;
+        if (result.kind === 'none') {
+          pendingConfirmRef.current = null;
+          return;
+        }
+
+        if (result.kind === 'quality') {
+          pendingConfirmRef.current = null;
+          const now = Date.now();
+          if (now - qualityHintAtRef.current > 2000) {
+            qualityHintAtRef.current = now;
+            setMessage(result.message);
+          }
+          return;
+        }
 
         if (result.kind === 'multiface') {
+          pendingConfirmRef.current = null;
           lastActivityRef.current = Date.now();
           setStatus('multiface');
           setMessage('One person only — step closer alone');
@@ -520,7 +562,10 @@ export function KioskMode() {
 
         lastActivityRef.current = Date.now();
         const bestMatch = faceMatcherRef.current.findBestMatch(result.detection.descriptor);
-        if (bestMatch.label === 'unknown') return;
+        if (bestMatch.label === 'unknown') {
+          pendingConfirmRef.current = null;
+          return;
+        }
 
         const now = Date.now();
         if (
@@ -529,6 +574,30 @@ export function KioskMode() {
         ) {
           return;
         }
+
+        // Require two consecutive matches of the same worker (~1–1.5s window)
+        const pending = pendingConfirmRef.current;
+        if (
+          pending &&
+          pending.employeeCode === bestMatch.label &&
+          now - pending.at < 1600
+        ) {
+          pendingConfirmRef.current = {
+            employeeCode: bestMatch.label,
+            count: pending.count + 1,
+            at: now,
+          };
+        } else {
+          pendingConfirmRef.current = { employeeCode: bestMatch.label, count: 1, at: now };
+          setMessage('Hold still…');
+          return;
+        }
+
+        if ((pendingConfirmRef.current?.count ?? 0) < 2) {
+          setMessage('Hold still…');
+          return;
+        }
+        pendingConfirmRef.current = null;
 
         setStatus('processing');
         lastScanRef.current = { employeeCode: bestMatch.label, time: now };
@@ -759,7 +828,7 @@ export function KioskMode() {
     <header className="fams-kiosk-chrome">
       <div className="fams-kiosk-chrome-brand">
         <span className="fams-kiosk-chrome-title">FAMS</span>
-        <span className="fams-kiosk-chrome-sub">Attendance kiosk</span>
+        <span className="fams-kiosk-chrome-sub">Floor kiosk</span>
       </div>
       <div className="fams-kiosk-chrome-meta">
         <span className="fams-kiosk-clock">{clock}</span>
@@ -784,10 +853,10 @@ export function KioskMode() {
             <ShieldCheck className="h-8 w-8 text-[var(--accent)]" strokeWidth={1.75} />
           </div>
           <p className="fams-kiosk-pair-eyebrow">FAMS</p>
-          <h1 className="fams-kiosk-pair-title">Attendance kiosk</h1>
+          <h1 className="fams-kiosk-pair-title">Floor kiosk</h1>
           <p className="fams-kiosk-pair-copy">
-            On factory Wi‑Fi this device unlocks automatically. Off-site, an administrator unlocks
-            once with Google. Workers then scan faces without signing in.
+            Install this page to the home screen for a full-screen scanner. On factory
+            Wi‑Fi it unlocks automatically; off-site, an admin unlocks once with Google.
           </p>
 
           {googleConfigError && (

@@ -106,6 +106,9 @@ export function computeDailyPayFromSplit(
   const reg = roundHours(regularHours, ps.payrollRounding);
   const ot = ps.payrollIncludeOvertime ? roundHours(overtimeHours, ps.payrollRounding) : 0;
   const effectiveStandard = Math.min(ps.standardWorkHours, ps.overtimeThreshold);
+  // Profile overtimeRate (₹/hr from worker create/edit) is the sole OT pay rate.
+  // Weekend/holiday multipliers apply to daily wage only — not to OT.
+  const otRate = Number(worker.overtimeRate) || 0;
 
   let basePay = 0;
   if (reg >= effectiveStandard) {
@@ -114,7 +117,7 @@ export function computeDailyPayFromSplit(
     basePay = (reg / effectiveStandard) * worker.dailyWage * mult;
   }
 
-  const otPay = ot > 0 ? ot * worker.overtimeRate * mult : 0;
+  const otPay = ot > 0 && otRate > 0 ? ot * otRate : 0;
   const gross = basePay + otPay;
   const tax = gross * (ps.payrollTaxRate / 100);
 

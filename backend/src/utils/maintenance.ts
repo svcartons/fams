@@ -1,93 +1,88 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import prisma from '../db';
+import {
+  buildSalaryPeriodReport,
+  resolvePeriodBounds,
+  type SalaryPeriodReport,
+} from './salaryPeriod';
 import { getSettingsMap } from './settingsCache';
-import { buildPayrollSettings, computeDailyPay } from './payrollRules';
 import { getTodayWorkDate } from './workDate';
 import { sendWebhookNotification } from './notifications';
 
 const EXPORTS_DIR = path.join(__dirname, '..', '..', 'exports');
 
-export async function generatePayrollExportFile(
-  period: string,
-  format: string,
-): Promise<{ filename: string; filepath: string; workerCount: number }> {
+export function getExportsDir() {
+  return EXPORTS_DIR;
+}
+
+export function snapshotPathFor(csvFilename: string) {
+  return path.join(EXPORTS_DIR, `${csvFilename}.snapshot.json`);
+}
+
+export async function generatePayrollExportFile(opts: {
+  period?: string;
+  month?: string;
+  from?: string;
+  to?: string;
+  format?: string;
+}): Promise<{
+  filename: string;
+  filepath: string;
+  snapshotPath: string;
+  workerCount: number;
+  periodLabel: string;
+  from: string;
+  to: string;
+  report: SalaryPeriodReport;
+}> {
   if (!fs.existsSync(EXPORTS_DIR)) {
     fs.mkdirSync(EXPORTS_DIR, { recursive: true });
   }
 
   const settings = await getSettingsMap();
-  const ps = buildPayrollSettings(settings);
-  const workDate = await getTodayWorkDate();
-
-  const workers = await prisma.worker.findMany({
-    where: { isActive: true },
-    include: {
-      attendanceEvents: {
-        where: { workDate },
-        orderBy: { timestamp: 'asc' },
-      },
-    },
+  const todayWorkDate = await getTodayWorkDate();
+  const bounds = resolvePeriodBounds({
+    period: opts.period,
+    month: opts.month,
+    from: opts.from,
+    to: opts.to,
+    payrollPeriod: settings.payroll_period || 'monthly',
+    todayWorkDate,
   });
 
-  const rows = workers.map((w) => {
-    const events = w.attendanceEvents;
-    let workedHours = 0;
-    let checkIn: Date | null = null;
-    for (const e of events) {
-      if (e.eventType === 'checked-in') checkIn = new Date(e.timestamp);
-      if (e.eventType === 'checked-out' && checkIn) {
-        workedHours += (new Date(e.timestamp).getTime() - checkIn.getTime()) / 3600000;
-        checkIn = null;
-      }
-    }
-    if (checkIn) {
-      workedHours += (Date.now() - checkIn.getTime()) / 3600000;
-    }
-    const pay = computeDailyPay(workedHours, workDate, w, ps);
-    return {
-      employeeCode: w.employeeCode,
-      name: w.name,
-      department: w.department,
-      workedHours: workedHours.toFixed(2),
-      basePay: pay.basePay,
-      otHours: pay.otHours,
-      otPay: pay.otPay,
-      gross: pay.gross,
-      tax: pay.tax,
-      net: pay.net,
-    };
+  const report = await buildSalaryPeriodReport({
+    from: bounds.from,
+    to: bounds.to,
+    periodLabel: bounds.label,
   });
 
-  const safePeriod = period.replace(/[^\w\-–, ]/g, '').slice(0, 60);
-  const ext = format.toLowerCase() === 'pdf' ? 'txt' : 'csv';
-  const filename = `payroll_${safePeriod.replace(/\s+/g, '_')}_${Date.now()}.${ext}`;
+  const currency = report.currency || 'INR';
+  const safePeriod = bounds.label.replace(/[^\w\-–, ]/g, '').slice(0, 60);
+  const filename = `payroll_${safePeriod.replace(/\s+/g, '_')}_${Date.now()}.csv`;
   const filepath = path.join(EXPORTS_DIR, filename);
+  const snapPath = snapshotPathFor(filename);
 
-  if (ext === 'csv') {
-    const header = 'employeeCode,name,department,workedHours,basePay,otHours,otPay,gross,tax,net,currency\n';
-    const body = rows
-      .map(
-        (r) =>
-          `${r.employeeCode},"${r.name}",${r.department},${r.workedHours},${r.basePay},${r.otHours},${r.otPay},${r.gross},${r.tax},${r.net},${settings.payroll_currency || 'USD'}`,
-      )
-      .join('\n');
-    fs.writeFileSync(filepath, header + body, 'utf-8');
-  } else {
-    const lines = [
-      `FAMS Payroll Export — ${period}`,
-      `Generated: ${new Date().toISOString()}`,
-      `Currency: ${settings.payroll_currency || 'USD'}`,
-      '',
-      ...rows.map(
-        (r) =>
-          `${r.employeeCode} | ${r.name} | ${r.department} | ${r.workedHours}h | gross ${r.gross} | net ${r.net}`,
-      ),
-    ];
-    fs.writeFileSync(filepath, lines.join('\n'), 'utf-8');
-  }
+  const header =
+    'employeeCode,name,department,daysPresent,incompleteDays,regularHours,otHours,basePay,otPay,gross,tax,net,currency\n';
+  const body = report.records
+    .map(
+      (r) =>
+        `${r.employeeCode},"${r.name.replace(/"/g, '""')}",${r.department},${r.daysPresent},${r.incompleteDays},${r.totalRegularHours},${r.overtimeHours},${r.baseSalary},${r.overtimePay},${r.salary},${r.tax},${r.net},${currency}`,
+    )
+    .join('\n');
+  fs.writeFileSync(filepath, header + body, 'utf-8');
+  fs.writeFileSync(snapPath, JSON.stringify(report, null, 2), 'utf-8');
 
-  return { filename, filepath, workerCount: rows.length };
+  return {
+    filename,
+    filepath,
+    snapshotPath: snapPath,
+    workerCount: report.records.length,
+    periodLabel: bounds.label,
+    from: bounds.from,
+    to: bounds.to,
+    report,
+  };
 }
 
 /** Check shifts past end time without check-out — fire missed punch alerts. */
@@ -95,6 +90,7 @@ export async function checkMissedPunches(): Promise<void> {
   const settings = await getSettingsMap();
   if (settings.notif_missed_punch !== 'true') return;
 
+  const prisma = (await import('../db')).default;
   const now = new Date();
   const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const shifts = await prisma.shift.findMany();
@@ -134,6 +130,7 @@ export async function enforceBiometricRetention(): Promise<void> {
   if (settings.bio_auto_delete !== 'true') return;
   const days = Number(settings.bio_retention_days || 365);
   const cutoff = new Date(Date.now() - days * 86400000);
+  const prisma = (await import('../db')).default;
   await prisma.worker.updateMany({
     where: { isActive: false, updatedAt: { lt: cutoff }, faceDescriptor: { not: null } },
     data: { faceDescriptor: null, avatarPhoto: null },

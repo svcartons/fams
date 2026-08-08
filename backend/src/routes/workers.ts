@@ -4,10 +4,13 @@ import { getIp } from '../utils/helpers';
 import { authenticateToken } from '../middleware/authMiddleware';
 import { sendWebhookNotification } from '../utils/notifications';
 import { getTodayWorkDate, statusFromTodayEvents } from '../utils/workDate';
-import { getSettingsMap } from '../utils/settingsCache';
-import { buildPayrollSettings, computeDailyPayFromSplit } from '../utils/payrollRules';
-import { computeDayWork, splitRegularAndOvertime } from '../utils/attendanceCalc';
-import { decryptBiometric, encryptBiometric } from '../utils/biometricCrypto';
+import { encryptBiometric } from '../utils/biometricCrypto';
+import { assertWorkDateEditable, buildSalaryPeriodReport } from '../utils/salaryPeriod';
+import {
+  normalizeIncomingFacePayload,
+  parseFaceDescriptors,
+  serializeFaceDescriptors,
+} from '../utils/faceDescriptor';
 
 const router = Router();
 
@@ -28,26 +31,17 @@ router.get('/faces', authenticateToken, async (req: Request, res: Response) => {
       select: { employeeCode: true, name: true, faceDescriptor: true }
     });
     
-    const faces = workers.map((w: any) => {
-      let descriptorArray = null;
-      if (w.faceDescriptor) {
-        if (w.faceDescriptor.startsWith('[')) {
-          // Legacy format (JSON string array)
-          descriptorArray = JSON.parse(decryptBiometric(w.faceDescriptor));
-        } else {
-          // Optimized format (Base64 encoded Float32Array)
-          const buffer = Buffer.from(decryptBiometric(w.faceDescriptor), 'base64');
-          const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
-          descriptorArray = Array.from(new Float32Array(arrayBuffer));
-        }
-      }
+    const faces = workers.map((w) => {
+      const descriptors = parseFaceDescriptors(w.faceDescriptor);
+      if (descriptors.length === 0) return null;
       return {
         workerId: w.employeeCode, 
         employeeCode: w.employeeCode,
         name: w.name,
-        descriptor: descriptorArray
+        descriptor: descriptors[0],
+        descriptors,
       };
-    }).filter((f: any) => f.descriptor !== null);
+    }).filter(Boolean);
 
     res.json(faces);
   } catch (err) {
@@ -103,103 +97,30 @@ router.get('/:id/summary', authenticateToken, async (req: Request, res: Response
     const worker = await prisma.worker.findUnique({ where: { employeeCode } });
     if (!worker) return res.status(404).json({ error: 'Worker not found' });
 
-    const startOfMonth = new Date(y, m - 1, 1);
-    const endOfMonth = new Date(y, m, 1);
     const daysInMonth = new Date(y, m, 0).getDate();
+    const from = `${y}-${String(m).padStart(2, '0')}-01`;
+    const to = `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
     const todayWorkDate = await getTodayWorkDate();
-    const settings = await getSettingsMap();
-    const ps = buildPayrollSettings(settings);
-    const bs = {
-      deductBreaks: ps.deductBreaks,
-      teaBreakDurationMs: ps.teaBreakDurationMs,
-      lunchBreakDurationMs: ps.lunchBreakDurationMs,
-    };
+
+    const report = await buildSalaryPeriodReport({ from, to, periodLabel: `${y}-${String(m).padStart(2, '0')}` });
+    const row = report.records.find((r) => r.employeeCode === employeeCode);
 
     const events = await prisma.attendanceEvent.findMany({
-      where: { workerId: worker.id, timestamp: { gte: startOfMonth, lt: endOfMonth } },
+      where: { workerId: worker.id, workDate: todayWorkDate },
       orderBy: { timestamp: 'asc' },
     });
-    const overrides = await prisma.dailyOverride.findMany({
-      where: {
-        workerId: worker.id,
-        date: {
-          gte: `${y}-${String(m).padStart(2, '0')}-01`,
-          lte: `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`,
-        },
-      },
-    });
-    const overrideMap = new Map(overrides.map((o) => [o.date, o]));
-
-    const IST_OFFSET_MS = 330 * 60000;
-    const dateFromEvent = (timestamp: Date) =>
-      new Date(timestamp.getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
-
-    const eventsByDay = new Map<string, typeof events>();
-    events.forEach((e) => {
-      const d = dateFromEvent(e.timestamp);
-      if (!eventsByDay.has(d)) eventsByDay.set(d, []);
-      eventsByDay.get(d)!.push(e);
-    });
-
-    let daysPresent = 0;
-    let daysIncomplete = 0;
-    let daysAbsent = 0;
-    let totalRegularHours = 0;
-    let totalOvertimeHours = 0;
-    let monthlySalary = 0;
-
-    for (let d = 1; d <= daysInMonth; d++) {
-      const date = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      const dayEvents = eventsByDay.get(date) ?? [];
-      const dayWork = computeDayWork(dayEvents, bs, date === todayWorkDate);
-
-      if (dayWork.status === 'absent') {
-        daysAbsent += 1;
-        continue;
-      }
-      if (dayWork.status === 'incomplete') daysIncomplete += 1;
-      if (dayWork.hasCheckIn) daysPresent += 1;
-
-      const override = overrideMap.get(date);
-      let regularHours: number;
-      let overtimeHours: number;
-
-      if (override) {
-        if (override.regularHours != null && override.overtimeHours != null) {
-          regularHours = override.regularHours;
-          overtimeHours = override.overtimeHours;
-        } else {
-          const split = splitRegularAndOvertime(override.hours, ps.standardWorkHours, ps.overtimeThreshold);
-          regularHours = split.regularHours;
-          overtimeHours = split.overtimeHours;
-        }
-      } else if (dayWork.workedHours > 0) {
-        const split = splitRegularAndOvertime(dayWork.workedHours, ps.standardWorkHours, ps.overtimeThreshold);
-        regularHours = split.regularHours;
-        overtimeHours = split.overtimeHours;
-      } else {
-        continue;
-      }
-
-      const pay = computeDailyPayFromSplit(regularHours, overtimeHours, date, worker, ps);
-      totalRegularHours += pay.regularHours;
-      totalOvertimeHours += pay.overtimeHours;
-      monthlySalary += pay.gross;
-    }
-
-    const todayEvents = eventsByDay.get(todayWorkDate) ?? [];
-    const liveStatus = statusFromTodayEvents(todayEvents);
+    const liveStatus = statusFromTodayEvents(events);
 
     res.json({
       employeeCode: worker.employeeCode,
       name: worker.name,
       month: `${y}-${String(m).padStart(2, '0')}`,
-      daysPresent,
-      daysIncomplete,
-      daysAbsent,
-      monthlySalary: parseFloat(monthlySalary.toFixed(2)),
-      totalRegularHours: parseFloat(totalRegularHours.toFixed(2)),
-      totalOvertimeHours: parseFloat(totalOvertimeHours.toFixed(2)),
+      daysPresent: row?.daysPresent ?? 0,
+      daysIncomplete: row?.incompleteDays ?? 0,
+      daysAbsent: Math.max(0, daysInMonth - (row?.daysPresent ?? 0) - (row?.incompleteDays ?? 0)),
+      monthlySalary: row?.salary ?? 0,
+      totalRegularHours: row?.totalRegularHours ?? 0,
+      totalOvertimeHours: row?.overtimeHours ?? 0,
       liveStatus,
     });
   } catch (err) {
@@ -299,6 +220,18 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
 
     if (!existing) return res.status(404).json({ error: 'Worker not found' });
 
+    // Wage changes affect current work date pay — block if that day is in a finalized period
+    if (dailyWage !== undefined || overtimeRate !== undefined) {
+      try {
+        await assertWorkDateEditable(await getTodayWorkDate());
+      } catch (err: any) {
+        if (err?.status === 409 || err?.code === 'PAYROLL_FINALIZED') {
+          return res.status(409).json({ error: err.message, code: 'PAYROLL_FINALIZED' });
+        }
+        throw err;
+      }
+    }
+
     const worker = await prisma.worker.update({
       where: { employeeCode: req.params.id as string },
       data: { 
@@ -386,28 +319,26 @@ router.delete('/:id', authenticateToken, async (req: Request, res: Response) => 
   }
 });
 
-// PATCH /api/workers/:id/face - update worker face descriptor and photo
+// PATCH /api/workers/:id/face - update worker face descriptor(s) and photo
 router.patch('/:id/face', authenticateToken, async (req: Request, res: Response) => {
   const { faceDescriptor, avatarPhoto } = req.body;
-  if (!faceDescriptor || !Array.isArray(faceDescriptor)) {
-    return res.status(400).json({ error: 'Missing or invalid faceDescriptor' });
-  }
   try {
+    let descriptors: number[][];
+    try {
+      descriptors = normalizeIncomingFacePayload(faceDescriptor);
+    } catch {
+      return res.status(400).json({ error: 'Missing or invalid faceDescriptor' });
+    }
+
     const existing = await prisma.worker.findUnique({
       where: { employeeCode: req.params.id as string }
     });
     if (!existing) return res.status(404).json({ error: 'Worker not found' });
 
-    // Storage Optimization: Convert 128 floats to a Float32Array, then base64 string
-    // This reduces storage from ~2.5KB (JSON string) to exactly ~684 bytes (Base64)
-    const float32Array = new Float32Array(faceDescriptor);
-    const buffer = Buffer.from(float32Array.buffer);
-    const base64Descriptor = buffer.toString('base64');
-
     await prisma.worker.update({
       where: { employeeCode: String(req.params.id) },
-      data: { 
-        faceDescriptor: encryptBiometric(base64Descriptor),
+      data: {
+        faceDescriptor: serializeFaceDescriptors(descriptors),
         avatarPhoto: avatarPhoto || null
       },
     });
@@ -417,12 +348,12 @@ router.patch('/:id/face', authenticateToken, async (req: Request, res: Response)
         actor: (req as any).user?.username || 'Supervisor',
         action: 'Face Registered',
         target: `${existing.name} (${existing.employeeCode})`,
-        details: 'Facial recognition data and photo updated (optimized storage)',
+        details: `Facial recognition updated (${descriptors.length} sample${descriptors.length === 1 ? '' : 's'})`,
         ipAddress: getIp(req),
       },
     });
 
-    res.json({ message: 'Face descriptor and photo updated successfully' });
+    res.json({ message: 'Face descriptor and photo updated successfully', samples: descriptors.length });
   } catch (err) {
     console.error('Face update error:', err);
     res.status(500).json({ error: 'Failed to update face descriptor' });

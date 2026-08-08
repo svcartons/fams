@@ -2,10 +2,10 @@
 export function getHomeRoute(role: string): string {
   switch (role) {
     case 'admin':
-      return '/';
+      return '/today';
     case 'supervisor':
-      return '/';
+      return '/today';
     default:
-      return '/';
+      return '/today';
   }
 }

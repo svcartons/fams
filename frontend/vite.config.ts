@@ -9,6 +9,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      includeAssets: ['vite.svg'],
       workbox: {
         globIgnores: ['**/models/**', '**/vendor-faceapi*.js'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
@@ -24,11 +25,25 @@ export default defineConfig({
         ],
       },
       manifest: {
-        name: 'FAMS - Factory Attendance',
-        short_name: 'FAMS',
-        theme_color: '#000000',
-        background_color: '#ffffff',
+        name: 'FAMS Attendance Kiosk',
+        short_name: 'FAMS Kiosk',
+        description: 'Factory floor face attendance — install on tablets',
+        theme_color: '#1D4ED8',
+        background_color: '#F5F5F4',
         display: 'standalone',
+        orientation: 'any',
+        start_url: '/kiosk',
+        scope: '/',
+        lang: 'en',
+        categories: ['business', 'productivity'],
+        icons: [
+          {
+            src: '/vite.svg',
+            sizes: 'any',
+            type: 'image/svg+xml',
+            purpose: 'any',
+          },
+        ],
       },
     }),
   ],

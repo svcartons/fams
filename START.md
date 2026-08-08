@@ -73,15 +73,18 @@ Find your IP with: `ipconfig` (Windows) or `ip addr` (Linux)
 
 ---
 
-## 📱 Kiosk tablet
+## 📱 Floor kiosk (PWA)
 
-1. Open `http://<SERVER-IP>:8080/kiosk` on the tablet (use **HTTPS** in production — browsers require a secure context for the camera except on localhost).
-2. **On factory LAN:** the kiosk auto-pairs via bootstrap and starts scanning.
-3. **Off-site / public internet:** an admin unlocks once with Google (accounts listed in `ADMIN_GOOGLE_EMAIL`). The device stores a kiosk token until an admin regenerates it under Settings → Security.
-4. Enable **Cached Offline Scan Capability** in Settings → AI & Kiosk if tablets should queue punches when the network drops (they sync via bulk-sync when back online).
-5. After regenerating the kiosk token, every tablet must unlock again.
+Floor tablets use the **web kiosk only** (the Android APK was removed).
 
-PWA: the web app manifest uses `start_url: "/kiosk"` so “Add to Home Screen” opens the kiosk directly.
+1. Open `https://<SERVER>/kiosk` on the tablet (use **HTTPS** in production — browsers require a secure context for the camera except on localhost).
+2. **Add to Home Screen** (Chrome / Safari) so the icon opens the scanner full-screen. Manifest `start_url` is `/kiosk`.
+3. **On factory LAN:** the kiosk auto-pairs via bootstrap and starts scanning.
+4. **Off-site / public internet:** an admin unlocks once with Google (accounts listed in `ADMIN_GOOGLE_EMAIL`). The device stores a kiosk token until an admin regenerates it under Settings → Security.
+5. Enable **Cached Offline Scan Capability** in Settings → AI & Kiosk if tablets should queue punches when the network drops (they sync via bulk-sync when back online).
+6. After regenerating the kiosk token, every tablet must unlock again.
+
+Install tips and the kiosk URL also live under **Settings → Floor Kiosk**.
 
 ---
 

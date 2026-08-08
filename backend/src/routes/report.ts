@@ -3,11 +3,15 @@ import prisma from '../db';
 import { getIp } from '../utils/helpers';
 import { getTodayWorkDate, useMidnightRollover, workDateToUtcRange } from '../utils/workDate';
 import { getSettingsMap } from '../utils/settingsCache';
-import { buildPayrollSettings, computeDailyPayFromSplit } from '../utils/payrollRules';
-import { computeDayWork, splitRegularAndOvertime } from '../utils/attendanceCalc';
+import { buildPayrollSettings } from '../utils/payrollRules';
+import { computeDayWork } from '../utils/attendanceCalc';
+import {
+  assertWorkDateEditable,
+  buildSalaryPeriodReport,
+  resolvePeriodBounds,
+} from '../utils/salaryPeriod';
 
 const router = Router();
-const IST_OFFSET_MS = 330 * 60000;
 
 async function getPayrollSettings() {
   const settings = await getSettingsMap();
@@ -20,10 +24,6 @@ function breakSettings(ps: Awaited<ReturnType<typeof getPayrollSettings>>) {
     teaBreakDurationMs: ps.teaBreakDurationMs,
     lunchBreakDurationMs: ps.lunchBreakDurationMs,
   };
-}
-
-function dateFromEvent(timestamp: Date): string {
-  return new Date(timestamp.getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
 }
 
 function buildDaySummaryForWorkers(
@@ -204,17 +204,7 @@ router.get('/month-summary', async (req: Request, res: Response) => {
 // GET /api/report/salary?month=YYYY-MM
 router.get('/salary', async (req: Request, res: Response) => {
   try {
-    const monthStr = req.query.month as string;
-    const [y, m] = monthStr
-      ? monthStr.split('-').map(Number)
-      : [new Date().getFullYear(), new Date().getMonth() + 1];
-
-    const startOfMonth = new Date(y, m - 1, 1);
-    const endOfMonth = new Date(y, m, 1);
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const ps = await getPayrollSettings();
-    const bs = breakSettings(ps);
-
+    const monthStr = (req.query.month as string) || undefined;
     const userRole = (req as any).user?.role;
     if (userRole !== 'admin') {
       const settingRow = await prisma.systemSetting.findUnique({
@@ -225,153 +215,42 @@ router.get('/salary', async (req: Request, res: Response) => {
       }
     }
 
-    const workers = await prisma.worker.findMany({
-      where: {
-        OR: [
-          { isActive: true },
-          { attendanceEvents: { some: { timestamp: { gte: startOfMonth, lt: endOfMonth } } } },
-        ],
-      },
-      include: {
-        attendanceEvents: {
-          where: { timestamp: { gte: startOfMonth, lt: endOfMonth } },
-          orderBy: { timestamp: 'asc' },
-        },
-        dailyOverrides: {
-          where: {
-            date: {
-              gte: `${y}-${String(m).padStart(2, '0')}-01`,
-              lte: `${y}-${String(m).padStart(2, '0')}-31`,
-            },
-          },
-        },
-      },
-      orderBy: { employeeCode: 'asc' },
+    const todayWorkDate = await getTodayWorkDate();
+    const bounds = resolvePeriodBounds({
+      month: monthStr,
+      period: monthStr,
+      payrollPeriod: 'monthly',
+      todayWorkDate,
     });
 
-    const records = workers
-      .map((w) => {
-        const overrideMap = new Map(
-          w.dailyOverrides.map((o) => [
-            o.date,
-            {
-              regularHours: o.regularHours ?? null,
-              overtimeHours: o.overtimeHours ?? null,
-              hours: o.hours,
-            },
-          ]),
-        );
+    const report = await buildSalaryPeriodReport({
+      from: bounds.from,
+      to: bounds.to,
+      periodLabel: bounds.label,
+    });
 
-        let totalBaseSalary = 0;
-        let totalOvertimePay = 0;
-        let totalRegularHours = 0;
-        let totalOvertimeHours = 0;
-        let daysPresent = 0;
-
-        const eventsByDay = new Map<string, typeof w.attendanceEvents>();
-        w.attendanceEvents.forEach((e) => {
-          const d = dateFromEvent(e.timestamp);
-          if (!eventsByDay.has(d)) eventsByDay.set(d, []);
-          eventsByDay.get(d)!.push(e);
-        });
-        w.dailyOverrides.forEach((o) => {
-          if (!eventsByDay.has(o.date)) eventsByDay.set(o.date, []);
-        });
-
-        const dailyBreakdown: Array<{
-          date: string;
-          regularHours: number;
-          overtimeHours: number;
-          hours: number;
-          regularPay: number;
-          overtimePay: number;
-          dayPay: number;
-          status: string;
-          isOverridden: boolean;
-        }> = [];
-
-        eventsByDay.forEach((dayEvents, date) => {
-          const dayWork = computeDayWork(dayEvents, bs, date === todayStr);
-          const override = overrideMap.get(date);
-
-          let regularHours: number;
-          let overtimeHours: number;
-
-          if (override) {
-            if (override.regularHours != null && override.overtimeHours != null) {
-              regularHours = override.regularHours;
-              overtimeHours = override.overtimeHours;
-            } else {
-              const split = splitRegularAndOvertime(
-                override.hours,
-                ps.standardWorkHours,
-                ps.overtimeThreshold,
-              );
-              regularHours = split.regularHours;
-              overtimeHours = split.overtimeHours;
-            }
-          } else if (dayWork.workedHours > 0) {
-            const split = splitRegularAndOvertime(
-              dayWork.workedHours,
-              ps.standardWorkHours,
-              ps.overtimeThreshold,
-            );
-            regularHours = split.regularHours;
-            overtimeHours = split.overtimeHours;
-          } else {
-            regularHours = 0;
-            overtimeHours = 0;
-          }
-
-          const pay = computeDailyPayFromSplit(regularHours, overtimeHours, date, w, ps);
-          const hours = regularHours + overtimeHours;
-
-          dailyBreakdown.push({
-            date,
-            regularHours: pay.regularHours,
-            overtimeHours: pay.overtimeHours,
-            hours: parseFloat(hours.toFixed(2)),
-            regularPay: pay.basePay,
-            overtimePay: pay.otPay,
-            dayPay: pay.gross,
-            status: dayWork.status,
-            isOverridden: !!override,
-          });
-
-          if (hours > 0 || dayWork.hasCheckIn) {
-            if (hours > 0) daysPresent += 1;
-            totalBaseSalary += pay.basePay;
-            totalOvertimePay += pay.otPay;
-            totalRegularHours += pay.regularHours;
-            totalOvertimeHours += pay.overtimeHours;
-          }
-        });
-
-        return {
-          employeeCode: w.employeeCode,
-          name: w.name,
-          department: w.department,
-          role: w.role,
-          dailyWage: w.dailyWage,
-          overtimeRate: w.overtimeRate,
-          daysPresent,
-          totalRegularHours: parseFloat(totalRegularHours.toFixed(2)),
-          baseSalary: parseFloat(totalBaseSalary.toFixed(2)),
-          overtimeHours: parseFloat(totalOvertimeHours.toFixed(2)),
-          overtimePay: parseFloat(totalOvertimePay.toFixed(2)),
-          salary: parseFloat((totalBaseSalary + totalOvertimePay).toFixed(2)),
-          isActive: w.isActive,
-          dailyBreakdown: dailyBreakdown.sort((a, b) => a.date.localeCompare(b.date)),
-        };
-      })
-      .filter((r) => r.isActive || r.salary > 0);
-
-    const totalPayout = records.reduce((sum, r) => sum + r.salary, 0);
+    const finalized = await prisma.payrollExport.findFirst({
+      where: {
+        period: bounds.label,
+        finalizedAt: { not: null },
+        status: 'finalized',
+      },
+      orderBy: { generatedAt: 'desc' },
+    });
 
     res.json({
-      month: `${y}-${String(m).padStart(2, '0')}`,
-      totalPayout: parseFloat(totalPayout.toFixed(2)),
-      records,
+      month: bounds.label,
+      from: report.from,
+      to: report.to,
+      currency: report.currency,
+      totalPayout: report.totalPayout,
+      totalTax: report.totalTax,
+      totalNet: report.totalNet,
+      incompleteDayCount: report.incompleteDayCount,
+      finalized: !!finalized,
+      finalizedAt: finalized?.finalizedAt ?? null,
+      finalizedExportId: finalized?.id ?? null,
+      records: report.records,
     });
   } catch (err) {
     console.error(err);
@@ -397,6 +276,8 @@ router.post('/salary/override', async (req: Request, res: Response) => {
     if (userRole !== 'admin') {
       return res.status(403).json({ error: 'Only administrators can manually override salary or hours.' });
     }
+
+    await assertWorkDateEditable(String(date));
 
     const worker = await prisma.worker.findUnique({ where: { employeeCode } });
     if (!worker) return res.status(404).json({ error: 'Worker not found' });
@@ -436,8 +317,52 @@ router.post('/salary/override', async (req: Request, res: Response) => {
     });
 
     res.json(override);
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.status === 409 || err?.code === 'PAYROLL_FINALIZED') {
+      return res.status(409).json({ error: err.message, code: 'PAYROLL_FINALIZED' });
+    }
     res.status(500).json({ error: 'Failed to save override' });
+  }
+});
+
+// DELETE /api/report/salary/override — clear a day override
+router.delete('/salary/override', async (req: Request, res: Response) => {
+  const { employeeCode, date } = req.body || {};
+  if (!employeeCode || !date) {
+    return res.status(400).json({ error: 'Missing employeeCode or date' });
+  }
+
+  try {
+    const userRole = (req as any).user?.role;
+    if (userRole !== 'admin') {
+      return res.status(403).json({ error: 'Only administrators can clear salary overrides.' });
+    }
+
+    await assertWorkDateEditable(String(date));
+
+    const worker = await prisma.worker.findUnique({ where: { employeeCode } });
+    if (!worker) return res.status(404).json({ error: 'Worker not found' });
+
+    await prisma.dailyOverride.deleteMany({
+      where: { workerId: worker.id, date: String(date) },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        actor: (req as any).user?.username || 'Admin',
+        action: 'Salary Override Cleared',
+        target: `${worker.name} (${worker.employeeCode})`,
+        details: `Cleared override for ${date}`,
+        ipAddress: getIp(req),
+      },
+    });
+
+    res.json({ message: 'Override cleared' });
+  } catch (err: any) {
+    if (err?.status === 409 || err?.code === 'PAYROLL_FINALIZED') {
+      return res.status(409).json({ error: err.message, code: 'PAYROLL_FINALIZED' });
+    }
+    res.status(500).json({ error: 'Failed to clear override' });
   }
 });
 

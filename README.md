@@ -114,13 +114,15 @@ The face recognition process is broken down into four distinct high-performance 
 
 ## 📱 Mobile & Kiosk Strategy (PWA/HTTPS)
 
+Floor tablets use the **web Progressive Web App** at `/kiosk` (Add to Home Screen). The Android/Capacitor APK was removed.
+
 ### 1. PWA Reliability
-Using `vite-plugin-pwa`, we implement a "Cache First" strategy for all AI models (over 20MB of weights). This ensures the Kiosk boots in under 1 second after the initial load, even without an internet connection.
+Using `vite-plugin-pwa`, we cache app shells and API responses so the kiosk recovers quickly after the first load. Face models are loaded from `/models` (excluded from the SW precache due to size).
 
 ### 2. The HTTPS/SSL Bridge
-Modern mobile browsers (Safari/Chrome) block `getUserMedia` (camera) on non-secure origins. 
-*   **Dev Solution**: We use `@vitejs/plugin-basic-ssl` to create a secure tunnel.
-*   **Prod Solution**: Nginx handles the SSL certificate, allowing tablets to connect securely via the factory Wi-Fi.
+Modern mobile browsers (Safari/Chrome) block `getUserMedia` (camera) on non-secure origins.
+*   **Dev Solution**: Use HTTPS locally or localhost exceptions.
+*   **Prod Solution**: Nginx (or similar) terminates TLS so tablets get a secure camera context on factory Wi‑Fi.
 
 ---
 

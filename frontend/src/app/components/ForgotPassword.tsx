@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router';
-import { ArrowLeft, ShieldCheck } from 'lucide-react';
-import { AuthLayout } from './layout/AuthLayout';
+import { ArrowLeft } from 'lucide-react';
+import { AuthLayout, AuthNotice } from './layout/AuthLayout';
 
 export function ForgotPassword() {
   const navigate = useNavigate();
@@ -8,7 +8,7 @@ export function ForgotPassword() {
   return (
     <AuthLayout
       title="Account recovery"
-      subtitle="Password recovery requires an administrator approval."
+      subtitle="Recovery is handled through an approved administrator process."
       footer={(
         <button
           type="button"
@@ -20,15 +20,9 @@ export function ForgotPassword() {
         </button>
       )}
     >
-      <div className="fams-alert fams-alert-info flex gap-3">
-        <ShieldCheck className="w-5 h-5 text-[var(--accent)] shrink-0 mt-0.5" />
-        <div>
-          <p className="font-medium text-[var(--text)]">Contact your FAMS administrator</p>
-          <p className="text-sm text-[var(--muted)] mt-1">
-            Security-question recovery is disabled. An administrator can reset your password and the action will be recorded in the audit log.
-          </p>
-        </div>
-      </div>
+      <AuthNotice>
+        Contact your FAMS administrator to request a password reset. Security-question recovery is disabled, and every reset is recorded in the audit log.
+      </AuthNotice>
     </AuthLayout>
   );
 }

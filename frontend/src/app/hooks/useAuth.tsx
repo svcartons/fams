@@ -10,6 +10,8 @@ export interface User {
   hasSeenOnboarding?: boolean;
   hasPassword?: boolean;
   authProvider?: string;
+  mfaEnabled?: boolean;
+  mfaEnrollmentSuggested?: boolean;
 }
 
 interface AuthContextType {
@@ -49,7 +51,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
   }, []);
 
-  const login = (newUser: User, newToken: string) => {
+  const login = (newUser: User, _newToken: string) => {
     setUser(newUser);
     // The backend sets an HttpOnly session cookie. Keep the returned token only for
     // native clients; never persist it in browser storage.
@@ -74,10 +76,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
-    apiLogout().catch(() => {});
-    setUser(null);
-    setToken(null);
-    localStorage.removeItem('fams_user');
+    apiLogout().catch(() => {}).finally(() => {
+      setUser(null);
+      setToken(null);
+      localStorage.removeItem('fams_user');
+      window.location.assign('/');
+    });
   };
 
   return (

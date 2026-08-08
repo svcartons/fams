@@ -291,7 +291,7 @@ export function WorkerDirectory() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 data-tour="input-worker-search"
-                className="fams-input"
+                className="fams-input fams-input-with-icon"
               />
             </div>
             <div data-tour="btn-view-toggle" className="flex gap-1">

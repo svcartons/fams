@@ -1,16 +1,20 @@
 {
   "short_name": "FAMS Kiosk",
-  "name": "Factory Attendance Kiosk",
+  "name": "FAMS Attendance Kiosk",
+  "description": "Factory floor face attendance — install on tablets",
   "icons": [
     {
       "src": "/vite.svg",
-      "sizes": "192x192",
-      "type": "image/svg+xml"
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ],
   "start_url": "/kiosk",
+  "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "orientation": "any",
+  "theme_color": "#1D4ED8",
+  "background_color": "#F5F5F4",
+  "lang": "en"
 }

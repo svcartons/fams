@@ -28,7 +28,7 @@ const DEFAULTS: Record<string, string> = {
   perm_supervisor_worker_view: 'true',
   perm_supervisor_worker_delete: 'false',
   perm_supervisor_correction_approve: 'true',
-  ai_threshold: '0.6',
+  ai_threshold: '0.55',
 
   // Operational Rules
   gracePeriod: '10',
@@ -70,7 +70,7 @@ const DEFAULTS: Record<string, string> = {
   ai_landmarks: 'true',
   ai_liveness: 'false',
   ai_rfid_fallback: 'true',
-  ai_multiface_alert: 'false',
+  ai_multiface_alert: 'true',
   kiosk_camera_res: '720p',
   kiosk_idle_timeout: '30',
   kiosk_ir_mode: 'false',
@@ -120,11 +120,11 @@ const DEFAULTS: Record<string, string> = {
   payroll_format: 'csv',
   payroll_period: 'biweekly',
   payroll_rounding: 'nearest_15',
-  payroll_currency: 'USD',
+  payroll_currency: 'INR',
   payroll_tax_rate: '22',
   payroll_deduct_breaks: 'true',
   payroll_include_overtime: 'true',
-  payroll_encrypt: 'true',
+  payroll_encrypt: 'false',
   payroll_auto_export: 'false',
   payroll_export_time: '07:00',
 
@@ -369,27 +369,44 @@ router.post('/payroll-exports', authenticateToken, async (req: Request, res: Res
         return res.status(403).json({ error: 'Payroll export restricted to administrators.' });
       }
     }
-    const { period, format } = req.body;
-    if (!period || !format) {
-      return res.status(400).json({ error: 'Period and format parameters are required' });
-    }
+    const { period, format, month, from, to, finalize } = req.body || {};
+    const shouldFinalize = finalize !== false;
 
-    const generated = await generatePayrollExportFile(period, String(format));
+    const generated = await generatePayrollExportFile({
+      period: period ? String(period) : undefined,
+      month: month ? String(month) : undefined,
+      from: from ? String(from) : undefined,
+      to: to ? String(to) : undefined,
+      format: format ? String(format) : 'csv',
+    });
     const calculationHash = crypto.createHash('sha256').update(fs.readFileSync(generated.filepath)).digest('hex');
     const workerCount = generated.workerCount;
+    const periodLabel = generated.periodLabel;
+
+    // Void prior finalized exports for the same period label when re-finalizing
+    if (shouldFinalize) {
+      await prisma.payrollExport.updateMany({
+        where: {
+          period: periodLabel,
+          finalizedAt: { not: null },
+          status: { not: 'void' },
+        },
+        data: { status: 'superseded' },
+      });
+    }
 
     const newExport = await prisma.payrollExport.create({
       data: {
-        period,
-        format: String(format).toUpperCase(),
+        period: periodLabel,
+        format: 'CSV',
         workerCount,
-        status: 'active',
+        status: shouldFinalize ? 'finalized' : 'draft',
         filename: generated.filename,
         site: 'main',
-        calculationVersion: 'v1',
+        calculationVersion: 'v2-workdate',
         calculationHash,
-        finalizedAt: new Date(),
-        finalizedBy: (req as any).user?.id,
+        finalizedAt: shouldFinalize ? new Date() : null,
+        finalizedBy: shouldFinalize ? ((req as any).user?.id || (req as any).user?.username || null) : null,
       },
     });
 
@@ -397,27 +414,72 @@ router.post('/payroll-exports', authenticateToken, async (req: Request, res: Res
     await prisma.auditLog.create({
       data: {
         actor,
-        action: 'Payroll Exported',
-        target: period,
-        details: `Generated and exported ${format} payroll data for ${workerCount} workers.`,
+        action: shouldFinalize ? 'Payroll Finalized' : 'Payroll Exported',
+        target: periodLabel,
+        details: `Generated CSV payroll for ${workerCount} workers (${generated.from} → ${generated.to}). Incomplete days: ${generated.report.incompleteDayCount}.`,
+        ipAddress: getIp(req),
       },
     });
 
-    // Dispatch webhook alert for payroll exported
     sendWebhookNotification(
       'notif_payroll_ready',
-      `💰 **Payroll Export Generated**\n• Period: \`${period}\`\n• Format: \`${String(format).toUpperCase()}\`\n• Worker Count: \`${workerCount}\`\n• Exported By: \`${actor}\``
+      `💰 **Payroll Export Generated**\n• Period: \`${periodLabel}\`\n• Format: \`CSV\`\n• Worker Count: \`${workerCount}\`\n• Exported By: \`${actor}\`${shouldFinalize ? '\n• Status: finalized' : ''}`
     ).catch(() => {});
 
-    res.json(newExport);
+    res.json({
+      ...newExport,
+      from: generated.from,
+      to: generated.to,
+      incompleteDayCount: generated.report.incompleteDayCount,
+      totalPayout: generated.report.totalPayout,
+      totalNet: generated.report.totalNet,
+    });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to record payroll export: ' + err.message });
+  }
+});
+
+// POST /api/settings/payroll-exports/:id/unfinalize — unlock a pay period
+router.post('/payroll-exports/:id/unfinalize', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    if ((req as any).user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Only administrators can unfinalize payroll' });
+    }
+    const exportRow = await prisma.payrollExport.findUnique({ where: { id: String(req.params.id) } });
+    if (!exportRow) return res.status(404).json({ error: 'Export not found' });
+
+    const updated = await prisma.payrollExport.update({
+      where: { id: exportRow.id },
+      data: { finalizedAt: null, finalizedBy: null, status: 'void' },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        actor: (req as any).user?.username || 'Admin',
+        action: 'Payroll Unfinalized',
+        target: exportRow.period,
+        details: `Unlocked payroll export ${exportRow.id} for period ${exportRow.period}`,
+        ipAddress: getIp(req),
+      },
+    });
+
+    res.json(updated);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to unfinalize payroll: ' + err.message });
   }
 });
 
 // GET /api/settings/payroll-exports/:id/download — download generated export file
 router.get('/payroll-exports/:id/download', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const userRole = (req as any).user?.role;
+    if (userRole !== 'admin') {
+      const setting = await prisma.systemSetting.findUnique({ where: { key: 'perm_supervisor_export_payroll' } });
+      if (setting?.value !== 'true') {
+        return res.status(403).json({ error: 'Payroll export restricted to administrators.' });
+      }
+    }
+
     const exportRow = await prisma.payrollExport.findUnique({ where: { id: String(req.params.id) } });
     if (!exportRow) return res.status(404).json({ error: 'Export not found' });
 
@@ -429,6 +491,17 @@ router.get('/payroll-exports/:id/download', authenticateToken, async (req: Reque
 
     const filepath = path.join(exportsDir, filename);
     if (!fs.existsSync(filepath)) return res.status(404).json({ error: 'Export file not found on disk' });
+
+    await prisma.auditLog.create({
+      data: {
+        actor: (req as any).user?.username || 'User',
+        action: 'Payroll Download',
+        target: exportRow.period,
+        details: `Downloaded payroll file ${filename}`,
+        ipAddress: getIp(req),
+      },
+    });
+
     res.download(filepath, filename);
   } catch (err: any) {
     res.status(500).json({ error: 'Download failed: ' + err.message });

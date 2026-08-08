@@ -6,7 +6,7 @@ import jwt from 'jsonwebtoken';
 import { authenticateToken, requireAdmin, requireTerminal, getRequestToken, hashTerminalToken } from '../middleware/authMiddleware';
 import { getIp } from '../utils/helpers';
 import { writeAuditLog } from '../utils/audit';
-import { decryptBiometric } from '../utils/biometricCrypto';
+import { parseFaceDescriptors } from '../utils/faceDescriptor';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'fams-development-only-secret-change-me';
@@ -215,25 +215,6 @@ router.post('/heartbeat', authenticateToken, requireTerminal, async (req: Reques
   }
 });
 
-function parseFaceDescriptor(raw: string | null): number[] | null {
-  if (!raw) return null;
-  try {
-    let arr: number[];
-    const decrypted = decryptBiometric(raw);
-    if (decrypted.startsWith('[')) {
-      arr = JSON.parse(decrypted);
-    } else {
-      const buffer = Buffer.from(decrypted, 'base64');
-      const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
-      arr = Array.from(new Float32Array(arrayBuffer));
-    }
-    if (!Array.isArray(arr) || arr.length !== 128) return null;
-    return arr;
-  } catch {
-    return null;
-  }
-}
-
 // GET /api/terminals/sync-pack
 // Mobile kiosk: pull workers + face descriptors from laptop server (terminal token auth)
 router.get('/sync-pack', authenticateToken, requireTerminal, async (req: Request, res: Response) => {
@@ -261,12 +242,13 @@ router.get('/sync-pack', authenticateToken, requireTerminal, async (req: Request
 
     const faces = withFaces
       .map(w => {
-        const descriptor = parseFaceDescriptor(w.faceDescriptor);
-        if (!descriptor) return null;
+        const descriptors = parseFaceDescriptors(w.faceDescriptor);
+        if (descriptors.length === 0) return null;
         return {
           employeeCode: w.employeeCode,
           name: w.name,
-          descriptor,
+          descriptor: descriptors[0],
+          descriptors,
         };
       })
       .filter(Boolean);

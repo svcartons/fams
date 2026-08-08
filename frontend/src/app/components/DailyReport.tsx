@@ -1,4 +1,4 @@
-import { Download, Calendar } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { getDailyReport, type DailyRecord } from '../../api/client';
 import { PageShell, DataPanel } from './layout/PageShell';
@@ -88,15 +88,28 @@ export function DailyReport({ embedded = false }: { embedded?: boolean }) {
   };
 
   const toolbar = (
-    <div className="flex flex-wrap gap-2 mb-4">
-      <div id="report-calendar" data-tour="report-calendar" className="relative">
-        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--muted)] pointer-events-none" />
-        <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="fams-input pl-9 w-auto" />
+    <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+      <div id="report-calendar" data-tour="report-calendar">
+        <input
+          type="date"
+          value={selectedDate}
+          onChange={(e) => setSelectedDate(e.target.value)}
+          className="fams-input"
+          style={{ width: 'calc(10.5rem + 2px)' }}
+        />
       </div>
-      <button type="button" id="btn-download-csv" data-tour="btn-export-csv" onClick={handleExportCSV} className="fams-btn fams-btn-primary">
-        <Download className="w-3.5 h-3.5" /> Export CSV
-      </button>
-      <PrintButton />
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          id="btn-download-csv"
+          data-tour="btn-export-csv"
+          onClick={handleExportCSV}
+          className="fams-btn fams-btn-primary"
+        >
+          <Download className="w-3.5 h-3.5" /> Export CSV
+        </button>
+        <PrintButton />
+      </div>
     </div>
   );
 
@@ -129,6 +142,7 @@ export function DailyReport({ embedded = false }: { embedded?: boolean }) {
           </div>
         ))}
       </div>
+
       <DataPanel id="report-timeline" data-tour="report-table">
         <DataTable
           columns={columns}

@@ -1,3 +1,4 @@
+import nodemailer from 'nodemailer';
 import prisma from '../db';
 import { getSettingsMap } from './settingsCache';
 import { settingBool } from './settingsDefaults';
@@ -19,8 +20,71 @@ function isQuietHours(settings: Record<string, string>): boolean {
   return mins >= start || mins < end;
 }
 
+function smtpConfigured(): boolean {
+  return Boolean((process.env.SMTP_HOST || '').trim());
+}
+
+async function logEmailFailure(details: string) {
+  console.warn(`[Notification] Email send failed: ${details}`);
+  try {
+    await prisma.auditLog.create({
+      data: {
+        actor: 'System',
+        action: 'Notification Email Failed',
+        target: 'SMTP',
+        details,
+        ipAddress: 'System',
+      },
+    });
+  } catch {
+    /* ignore audit failures */
+  }
+}
+
 /**
- * Dispatches alert to webhook when event is enabled and not in quiet hours.
+ * Send email via SMTP_* env. Soft-fails (logs + audit) when SMTP is not configured.
+ */
+export async function sendSmtpEmail(opts: {
+  to: string;
+  subject: string;
+  text: string;
+}): Promise<boolean> {
+  const host = (process.env.SMTP_HOST || '').trim();
+  if (!host) {
+    await logEmailFailure(
+      'SMTP not configured — set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM in backend .env'
+    );
+    return false;
+  }
+
+  const port = Number(process.env.SMTP_PORT || '587');
+  const user = (process.env.SMTP_USER || '').trim();
+  const pass = process.env.SMTP_PASS || '';
+  const from = (process.env.SMTP_FROM || user || 'noreply@fams.local').trim();
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: user ? { user, pass } : undefined,
+    });
+
+    await transporter.sendMail({
+      from,
+      to: opts.to,
+      subject: opts.subject,
+      text: opts.text,
+    });
+    return true;
+  } catch (err: any) {
+    await logEmailFailure(err?.message || String(err));
+    return false;
+  }
+}
+
+/**
+ * Dispatches alert to webhook and/or email when event is enabled and not in quiet hours.
  */
 export async function sendWebhookNotification(eventKey: string, message: string) {
   try {
@@ -58,16 +122,25 @@ export async function sendWebhookNotification(eventKey: string, message: string)
 
     if (channel === 'email' || channel === 'all') {
       const email = (settings.notif_email || '').trim();
-      if (email) {
-        console.log(`[Notification] Email to ${email}: ${message.replace(/\n/g, ' ')}`);
+      if (!email) {
+        console.log(`[Notification] Skipping email — no recipients configured`);
+      } else if (!smtpConfigured()) {
+        await logEmailFailure(
+          'Email channel selected but SMTP_* env vars are missing. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM in backend .env'
+        );
+      } else {
+        const plain = message.replace(/\*/g, '').replace(/`/g, '');
+        await sendSmtpEmail({
+          to: email,
+          subject: `FAMS Alert: ${eventKey.replace(/^notif_/, '').replace(/_/g, ' ')}`,
+          text: plain,
+        });
       }
     }
 
-    if (channel === 'sms' || channel === 'all') {
-      const sms = (settings.notif_sms || '').trim();
-      if (sms) {
-        console.log(`[Notification] SMS to ${sms}: ${message.replace(/\n/g, ' ')}`);
-      }
+    // SMS is deferred — log only if explicitly selected (legacy channel values)
+    if (channel === 'sms') {
+      console.log(`[Notification] SMS deferred — configure email or webhook instead`);
     }
   } catch (err) {
     console.error('[Notification Exception]', err);

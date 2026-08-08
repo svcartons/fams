@@ -16,10 +16,8 @@ import {
   Link2,
   FileText,
   Fingerprint,
-  RefreshCw,
   Info,
   Plus,
-  ArrowRight,
   Layers,
   Copy,
   ExternalLink,
@@ -31,7 +29,6 @@ import {
   Key,
   Lock,
   Smartphone,
-  Battery,
 } from "lucide-react";
 import {
   getSettings,
@@ -43,6 +40,9 @@ import {
   deleteShift,
   getUsers,
   changePassword,
+  setupMfa,
+  enableMfa,
+  disableMfa,
   getSystemInfo,
   purgeDescriptors,
   purgeAudit,
@@ -52,13 +52,9 @@ import {
   regenerateKioskToken,
   exportAuditArchive,
   getAuditLogs,
-  getTerminals,
-  generateTerminalCode,
-  revokeTerminal,
   type SystemSettings,
   type Shift,
   type PayrollExportRecord,
-  type MobileTerminal,
 } from "../../api/client";
 import { useAuth } from "../hooks/useAuth";
 
@@ -161,9 +157,9 @@ const navGroups: NavGroup[] = [
     items: [
       {
         id: "terminals",
-        label: "Mobile Terminals",
+        label: "Floor Kiosk",
         icon: <Smartphone size={16} />,
-        badge: "APK",
+        badge: "PWA",
       },
       { id: "integrations", label: "Integrations", icon: <Link2 size={16} /> },
       { id: "system", label: "System & Network", icon: <Server size={16} /> },
@@ -196,7 +192,7 @@ const sectionMeta: Record<Section, string> = {
   audit: "Retention policies and compliance export settings.",
   system: "Network, storage, and system maintenance options.",
   danger: "Irreversible actions — proceed with extreme caution.",
-  terminals: "Pair and manage mobile attendance terminal devices.",
+  terminals: "Install the floor attendance kiosk as a PWA on tablets.",
 };
 
 // ── Primitive UI Components ────────────────────────────────────────────────────
@@ -446,7 +442,15 @@ function ProfileSection({
   const [pwForm, setPwForm] = useState({ current: "", new: "", confirm: "" });
   const [pwLoading, setPwLoading] = useState(false);
   const [showFields, setShowFields] = useState<Record<string, boolean>>({});
+  const [mfaSecret, setMfaSecret] = useState<string | null>(null);
+  const [mfaOtpauth, setMfaOtpauth] = useState<string | null>(null);
+  const [mfaOtp, setMfaOtp] = useState("");
+  const [mfaLoading, setMfaLoading] = useState(false);
   const needsCurrentPassword = currentUser?.hasPassword !== false;
+  const canManageMfa = ["admin", "hr", "supervisor"].includes(
+    currentUser?.role || "",
+  );
+  const mfaEnabled = !!currentUser?.mfaEnabled;
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -461,7 +465,7 @@ function ProfileSection({
       toast.success(
         needsCurrentPassword
           ? "Password updated successfully"
-          : "Password set successfully — you can also sign in with username and password"
+          : "Password set successfully — you can also sign in with username and password",
       );
       setPwForm({ current: "", new: "", confirm: "" });
       _updateAuthUser({ hasPassword: true, authProvider: "local" });
@@ -472,8 +476,57 @@ function ProfileSection({
     }
   };
 
+  const handleMfaSetup = async () => {
+    setMfaLoading(true);
+    try {
+      const res = await setupMfa();
+      setMfaSecret(res.secret);
+      setMfaOtpauth(res.otpauthUrl);
+      setMfaOtp("");
+      toast.success("Scan the secret in your authenticator app, then confirm with a code");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to start MFA setup");
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleMfaEnable = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMfaLoading(true);
+    try {
+      await enableMfa(mfaOtp);
+      _updateAuthUser({ mfaEnabled: true, mfaEnrollmentSuggested: false });
+      setMfaSecret(null);
+      setMfaOtpauth(null);
+      setMfaOtp("");
+      toast.success("Two-factor authentication enabled");
+    } catch (err: any) {
+      toast.error(err.message || "Invalid authenticator code");
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleMfaDisable = async () => {
+    if (!confirm("Disable two-factor authentication for your account?")) return;
+    setMfaLoading(true);
+    try {
+      await disableMfa();
+      _updateAuthUser({ mfaEnabled: false });
+      setMfaSecret(null);
+      setMfaOtpauth(null);
+      toast.success("Two-factor authentication disabled");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to disable MFA");
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
   return (
-    <div className="fams-settings-grid fams-settings-grid-2">
+    <div className="fams-settings-stack">
+      <div className="fams-settings-grid fams-settings-grid-2">
       <Card>
         <CardHeader
           title="Account Profile"
@@ -620,6 +673,97 @@ function ProfileSection({
           </button>
         </form>
       </Card>
+      </div>
+
+      {canManageMfa && (
+        <Card>
+          <CardHeader
+            title="Two-Factor Authentication (2FA)"
+            description="Protect your account with an authenticator app (TOTP)."
+          />
+          <div className="fams-settings-card-body space-y-4">
+            {currentUser?.mfaEnrollmentSuggested && !mfaEnabled && (
+              <InfoBox type="warning">
+                Organization MFA policy is enabled. Enroll an authenticator app
+                below so login requires a second factor.
+              </InfoBox>
+            )}
+            <p className="text-sm text-[var(--muted)]">
+              Status:{" "}
+              <span className="font-bold text-[var(--text)]">
+                {mfaEnabled ? "Enabled" : "Not enabled"}
+              </span>
+            </p>
+            {!mfaEnabled && !mfaSecret && (
+              <button
+                type="button"
+                disabled={mfaLoading}
+                onClick={handleMfaSetup}
+                className="px-4 py-2.5 text-xs font-bold text-white bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-[var(--radius)] cursor-pointer disabled:opacity-50"
+              >
+                {mfaLoading ? "Starting…" : "Set up authenticator"}
+              </button>
+            )}
+            {mfaSecret && (
+              <form onSubmit={handleMfaEnable} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="fams-settings-label">Secret key</label>
+                  <p className="font-mono text-sm break-all bg-[var(--gray-50)] border border-[var(--border)] rounded-[var(--radius)] px-3 py-2">
+                    {mfaSecret}
+                  </p>
+                  {mfaOtpauth && (
+                    <p className="fams-settings-hint break-all">
+                      Or add via URI: {mfaOtpauth}
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <label className="fams-settings-label">
+                    Confirm with 6-digit code
+                  </label>
+                  <TextInput
+                    value={mfaOtp}
+                    onChange={(v) =>
+                      setMfaOtp(v.replace(/\D/g, "").slice(0, 6))
+                    }
+                    placeholder="000000"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={mfaLoading || mfaOtp.length !== 6}
+                    className="px-4 py-2.5 text-xs font-bold text-white bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-[var(--radius)] cursor-pointer disabled:opacity-50"
+                  >
+                    Enable 2FA
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMfaSecret(null);
+                      setMfaOtpauth(null);
+                      setMfaOtp("");
+                    }}
+                    className="px-4 py-2.5 text-xs font-bold text-[var(--muted)] border border-[var(--border)] rounded-[var(--radius)] cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+            {mfaEnabled && (
+              <button
+                type="button"
+                disabled={mfaLoading}
+                onClick={handleMfaDisable}
+                className="px-4 py-2.5 text-xs font-bold text-[var(--danger)] border border-[color-mix(in_srgb,var(--danger)_25%,var(--border))] rounded-[var(--radius)] cursor-pointer disabled:opacity-50"
+              >
+                Disable 2FA
+              </button>
+            )}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
@@ -655,24 +799,6 @@ function OperationalSection({
               value: settings.overtimeThreshold,
               set: (v: string) => onSettingChange("overtimeThreshold", v),
               suffix: "hrs / day",
-            },
-            {
-              label: "Max Consecutive Working Days",
-              value: settings.maxConsecutiveDays || "6",
-              set: (v: string) => onSettingChange("maxConsecutiveDays", v),
-              suffix: "days",
-            },
-            {
-              label: "Clock-in Grace Buffer Window",
-              value: settings.gracePeriod || "10",
-              set: (v: string) => onSettingChange("gracePeriod", v),
-              suffix: "mins",
-            },
-            {
-              label: "Early Checkout Window Tolerance",
-              value: settings.earlyCheckout || "15",
-              set: (v: string) => onSettingChange("earlyCheckout", v),
-              suffix: "mins",
             },
             {
               label: "Break Overtime Alert Threshold",
@@ -716,9 +842,11 @@ function OperationalSection({
             title="Deduct Break Durations Automatically"
             description="Automatically deduct configured break lengths from daily payroll totals."
             checked={deductBreaks}
-            onChange={(v) =>
-              onSettingChange("deductBreaks", v ? "true" : "false")
-            }
+            onChange={(v) => {
+              const val = v ? "true" : "false";
+              onSettingChange("deductBreaks", val);
+              onSettingChange("payroll_deduct_breaks", val);
+            }}
           />
           <ToggleRow
             title="Midnight Rollover Logic"
@@ -726,14 +854,6 @@ function OperationalSection({
             checked={settings.midnightAlgo !== 'false'}
             onChange={(v) =>
               onSettingChange("midnightAlgo", v ? "true" : "false")
-            }
-          />
-          <ToggleRow
-            title="Insert Mock Break Intervals"
-            description="Automatically log default break times midway during scheduled worker shifts."
-            checked={settings.autoBreakLog === "true"}
-            onChange={(v) =>
-              onSettingChange("autoBreakLog", v ? "true" : "false")
             }
             last
           />
@@ -743,7 +863,7 @@ function OperationalSection({
       <Card>
         <CardHeader
           title="Premium Wage Rates"
-          description="Configure overtime and special shift multipliers."
+          description="Configure weekend/holiday multipliers for daily wage. Overtime pay always uses each worker’s overtime rate (₹/hr) from their profile."
         />
         <div className="fams-settings-card-body fams-settings-grid fams-settings-grid-2">
           {[
@@ -760,20 +880,6 @@ function OperationalSection({
               set: (v: string) => onSettingChange("holidayMultiplier", v),
               suffix: "×",
               type: "number",
-            },
-            {
-              label: "Night Shift Differential Multiplier",
-              value: settings.nightDiffRate || "1.25",
-              set: (v: string) => onSettingChange("nightDiffRate", v),
-              suffix: "×",
-              type: "number",
-            },
-            {
-              label: "Night Differential Start Window",
-              value: settings.nightDiffStart || "22:00",
-              set: (v: string) => onSettingChange("nightDiffStart", v),
-              suffix: "",
-              type: "time",
             },
           ].map(({ label, value, set, suffix, type }) => (
             <div key={label} className="space-y-1.5">
@@ -804,15 +910,9 @@ function OperationalSection({
           />
           <ToggleRow
             title="Activate Public Holiday Rates"
-            description="Apply dynamic holiday pay multipliers on system-flagged calendar dates."
+            description="Apply holiday pay multipliers on dates listed in the holiday calendar setting (JSON array of YYYY-MM-DD)."
             checked={settings.holidayPay !== "false"}
             onChange={(v) => onSettingChange("holidayPay", v ? "true" : "false")}
-          />
-          <ToggleRow
-            title="Enforce Night Shift Differentials"
-            description="Apply hourly rate premiums for worker shifts extending past night start times."
-            checked={settings.nightDiff === "true"}
-            onChange={(v) => onSettingChange("nightDiff", v ? "true" : "false")}
             last
           />
         </div>
@@ -1000,35 +1100,11 @@ function ShiftsSection({
 
       <Card>
         <CardHeader
-          title="Scheduling Constraints"
-          description="Set buffer parameters and required off-duty resting constraints."
+          title="Capacity alerts"
+          description="Warn when shift fill approaches the configured limit."
         />
-        <div className="fams-settings-card-body fams-settings-grid fams-settings-grid-3">
-          <div className="space-y-1.5">
-            <label className="fams-settings-label">Shift Buffer Window</label>
-            <NumberInput
-              value={settings.shiftBufferTime || "15"}
-              onChange={(v) => onSettingChange("shiftBufferTime", v)}
-              suffix="mins"
-            />
-            <p className="fams-settings-hint">
-              Grace buffer before/after overlapping rosters.
-            </p>
-          </div>
-          <div className="space-y-1.5">
-            <label className="fams-settings-label">
-              Required Off-Duty Rest
-            </label>
-            <NumberInput
-              value={settings.minRestBetweenShifts || "8"}
-              onChange={(v) => onSettingChange("minRestBetweenShifts", v)}
-              suffix="hrs"
-            />
-            <p className="fams-settings-hint">
-              Minimum rest mandated between shift updates.
-            </p>
-          </div>
-          <div className="space-y-1.5">
+        <div className="fams-settings-card-body">
+          <div className="space-y-1.5 max-w-xs">
             <label className="fams-settings-label">
               Fill Warning Threshold
             </label>
@@ -1044,24 +1120,8 @@ function ShiftsSection({
         </div>
         <div className="border-t border-[var(--border)]">
           <ToggleRow
-            title="Mandate Approval for Roster Swaps"
-            description="Require manual supervisor signature to authorize mutual swap requests."
-            checked={settings.shiftSwapApproval === "true"}
-            onChange={(v) =>
-              onSettingChange("shiftSwapApproval", v ? "true" : "false")
-            }
-          />
-          <ToggleRow
-            title="Understaffed Shift Auto-Allocation"
-            description="Automatically balance floor rosters when worker quotas are unmet."
-            checked={settings.autoAssignOverflow === "true"}
-            onChange={(v) =>
-              onSettingChange("autoAssignOverflow", v ? "true" : "false")
-            }
-          />
-          <ToggleRow
             title="Exceeded Quota Push Notifications"
-            description="Trigger immediate push alerts when shift capacities exceed configured limits."
+            description="Trigger alerts when shift capacities exceed configured limits."
             checked={settings.shiftCapacityAlerts === "true"}
             onChange={(v) =>
               onSettingChange("shiftCapacityAlerts", v ? "true" : "false")
@@ -1230,7 +1290,7 @@ function PermissionsSection({
       key: "exportPayroll",
       settingKey: "perm_supervisor_export_payroll",
       title: "Generate Payroll Exports",
-      description: "Allow supervisors to generate CSV/PDF wage sheets.",
+      description: "Allow supervisors to generate and download period CSV wage sheets.",
       tag: { label: "Sensitive", color: "amber" },
     },
     {
@@ -1312,7 +1372,7 @@ function AIKioskSection({
   settings: SystemSettings;
   onSettingChange: (key: keyof SystemSettings, val: string) => void;
 }) {
-  const confidence = parseFloat(settings.ai_threshold || "0.6");
+  const confidence = parseFloat(settings.ai_threshold || "0.55");
 
   return (
     <div className="fams-settings-stack">
@@ -1413,24 +1473,15 @@ function AIKioskSection({
           </div>
 
           <InfoBox type="success">
-            Data security guaranteed: Zero facial images are captured or sent to
-            database structures. Only raw 128-float biometric maps are saved in
-            compliance with GDPR guidelines.
+            Face matching uses encrypted 128-float biometric templates (multiple samples per worker).
+            Optional avatar thumbnails may be stored for the worker directory only — not used for matching.
           </InfoBox>
         </div>
         <div className="border-t border-[var(--border)]">
           <ToggleRow
-            title="68-Point Facial Landmarks"
-            description="Align faces with landmark points before matching (recommended for accurate recognition)."
-            checked={settings.ai_landmarks !== "false"}
-            onChange={(v) =>
-              onSettingChange("ai_landmarks", v ? "true" : "false")
-            }
-          />
-          <ToggleRow
             title="Multi-Face Presence Alarms"
             description="Ignore punches when more than one face is in frame and show a one-person warning."
-            checked={settings.ai_multiface_alert === "true"}
+            checked={settings.ai_multiface_alert !== "false"}
             onChange={(v) =>
               onSettingChange("ai_multiface_alert", v ? "true" : "false")
             }
@@ -1551,39 +1602,17 @@ function BiometricSection({
           description="Establish capture quality bounds and enrollment policies."
         />
         <div className="fams-settings-card-body fams-settings-grid fams-settings-grid-2">
-          {[
-            {
-              label: "Biometric Reference Samples",
-              value: settings.bio_enrollment_samples || "5",
-              set: (v: string) => onSettingChange("bio_enrollment_samples", v),
-              suffix: "scans",
-              hint: "Reference captures averaged for template registry.",
-            },
-            {
-              label: "Roster Re-enrollment Target",
-              value: settings.bio_reenrollment_days || "180",
-              set: (v: string) => onSettingChange("bio_reenrollment_days", v),
-              suffix: "days",
-              hint: "Recalibrate face models past this age threshold.",
-            },
-          ].map(({ label, value, set, suffix, hint }) => (
-            <div key={label} className="space-y-1.5">
-              <label className="fams-settings-label">{label}</label>
-              <NumberInput value={value} onChange={set} suffix={suffix} />
-              <p className="fams-settings-hint">{hint}</p>
-            </div>
-          ))}
-        </div>
-        <div className="border-t border-[var(--border)]">
-          <ToggleRow
-            title="Permit Supervisor Client Enrollment"
-            description="Floor supervisors can enroll worker face signatures from active tablets."
-            checked={settings.bio_supervisor_enroll === "true"}
-            onChange={(v) =>
-              onSettingChange("bio_supervisor_enroll", v ? "true" : "false")
-            }
-            last
-          />
+          <div className="space-y-1.5">
+            <label className="fams-settings-label">Biometric Reference Samples</label>
+            <NumberInput
+              value={settings.bio_enrollment_samples || "5"}
+              onChange={(v) => onSettingChange("bio_enrollment_samples", v)}
+              suffix="scans"
+            />
+            <p className="fams-settings-hint">
+              Number of quality-checked captures required when registering a face (3–8). Supervisor enroll is controlled under Role Permissions.
+            </p>
+          </div>
         </div>
       </Card>
 
@@ -1594,8 +1623,8 @@ function BiometricSection({
         />
         <div className="fams-settings-card-body space-y-4">
           <InfoBox type="success">
-            Privacy preservation architecture: 128-float biometric signatures
-            only. Zero raw worker images are stored. GDPR compliant by design.
+            Face matching uses encrypted 128-float biometric templates. Optional
+            avatar thumbnails may be stored for the worker directory only.
           </InfoBox>
           <div className="space-y-1.5 pt-2">
             <label className="fams-settings-label">
@@ -1743,13 +1772,6 @@ function SecuritySection({
               hint: "Expiries validated for web access signatures.",
             },
             {
-              label: "Refresh Token Lifespan",
-              value: settings.sec_refresh_expiry || "10080",
-              set: (v: string) => onSettingChange("sec_refresh_expiry", v),
-              suffix: "mins",
-              hint: "Roster validation token auto-renewal duration.",
-            },
-            {
               label: "Max Login Violations Allowed",
               value: settings.sec_lockout_attempts || "5",
               set: (v: string) => onSettingChange("sec_lockout_attempts", v),
@@ -1770,13 +1792,6 @@ function SecuritySection({
               suffix: "chars",
               hint: "Enforced dynamically during setups or changes.",
             },
-            {
-              label: "Credential Lifespan limit",
-              value: settings.sec_password_expiry || "90",
-              set: (v: string) => onSettingChange("sec_password_expiry", v),
-              suffix: "days",
-              hint: "Mandate periodic system credential refreshes.",
-            },
           ].map(({ label, value, set, suffix, hint }) => (
             <div key={label} className="space-y-1.5">
               <label className="fams-settings-label">{label}</label>
@@ -1787,8 +1802,8 @@ function SecuritySection({
         </div>
         <div className="border-t border-[var(--border)]">
           <ToggleRow
-            title="Two-Factor (2FA) Verification"
-            description="Force TOTP code verification on supervisor and admin profiles."
+            title="Two-Factor (2FA / MFA) Policy"
+            description="When on, staff with authenticator 2FA enrolled must enter a TOTP code at login. Enable 2FA per user under My Profile. Admins/supervisors without 2FA will be prompted to enroll."
             checked={settings.sec_mfa_enabled === "true"}
             onChange={(v) =>
               onSettingChange("sec_mfa_enabled", v ? "true" : "false")
@@ -1802,14 +1817,6 @@ function SecuritySection({
             onChange={(v) =>
               onSettingChange("sec_force_https", v ? "true" : "false")
             }
-          />
-          <ToggleRow
-            title="Audit Sessions In Logs"
-            description="Record login details, IP scopes, and signatures in the Audit table."
-            checked={settings.sec_session_log === "true"}
-            onChange={(v) =>
-              onSettingChange("sec_session_log", v ? "true" : "false")
-            }
             last
           />
         </div>
@@ -1820,18 +1827,7 @@ function SecuritySection({
           title="Network Security Rules"
           description="Manage network CIDR blocks allowed to query sensor endpoints."
         />
-        <div className="fams-settings-card-body space-y-4">
-          <div className="space-y-1.5">
-            <label className="fams-settings-label">
-              CORS Allowed Headers Origin
-            </label>
-            <TextInput
-              value={settings.sec_cors_origin || "*"}
-              onChange={(v) => onSettingChange("sec_cors_origin", v)}
-            />
-          </div>
-        </div>
-        <div className="border-t border-[var(--border)]">
+        <div className="border-t-0">
           <ToggleRow
             title="Restricted Network IP Whitelisting"
             description="Reject clocking endpoints if client nodes reside outside whitelists."
@@ -1944,29 +1940,31 @@ function NotificationsSection({
   settings: SystemSettings;
   onSettingChange: (key: keyof SystemSettings, val: string) => void;
 }) {
-  const channel = settings.notif_channel || "push";
+  const channel = settings.notif_channel || "webhook";
 
   return (
     <div className="fams-settings-stack">
       <Card>
         <CardHeader
           title="Routing Channels"
-          description="Configure delivery parameters for supervisor nodes."
+          description="Configure delivery parameters for supervisor alerts."
         />
         <div className="fams-settings-card-body space-y-5">
           <div className="space-y-1.5">
             <label className="fams-settings-label">Primary Delivery Mode</label>
             <SelectInput
-              value={channel}
+              value={channel === "push" || channel === "sms" ? "webhook" : channel}
               onChange={(v) => onSettingChange("notif_channel", v)}
               options={[
-                { value: "push", label: "Push Notifications (Web Standard)" },
-                { value: "email", label: "Email Broadcasts" },
-                { value: "sms", label: "SMS Alerts (E.164 Routing)" },
-                { value: "webhook", label: "Webhooks (Slack / MS Teams)" },
-                { value: "all", label: "All Registered Channels" },
+                { value: "email", label: "Email" },
+                { value: "webhook", label: "Webhook (Slack / MS Teams)" },
+                { value: "all", label: "Email + Webhook" },
+                { value: "none", label: "Disabled" },
               ]}
             />
+            <p className="fams-settings-hint">
+              Email requires SMTP_* environment variables on the server. SMS is deferred.
+            </p>
           </div>
 
           {(channel === "email" || channel === "all") && (
@@ -1979,19 +1977,9 @@ function NotificationsSection({
                 onChange={(v) => onSettingChange("notif_email", v)}
                 placeholder="ops@company.com"
               />
-            </div>
-          )}
-
-          {(channel === "sms" || channel === "all") && (
-            <div className="space-y-1.5 animate-fade-in">
-              <label className="fams-settings-label">
-                SMS Recipient Number
-              </label>
-              <TextInput
-                value={settings.notif_sms || ""}
-                onChange={(v) => onSettingChange("notif_sms", v)}
-                placeholder="+1 (555) 123-4567"
-              />
+              <p className="fams-settings-hint">
+                Comma-separated addresses. Configure SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM in backend .env.
+              </p>
             </div>
           )}
 
@@ -2007,22 +1995,6 @@ function NotificationsSection({
               />
             </div>
           )}
-
-          <div className="space-y-1.5">
-            <label className="fams-settings-label">
-              Roster Digest Broadcast Cycle
-            </label>
-            <SelectInput
-              value={settings.notif_digest_freq || "daily"}
-              onChange={(v) => onSettingChange("notif_digest_freq", v)}
-              options={[
-                { value: "realtime", label: "Real-time (Immediate logs)" },
-                { value: "hourly", label: "Hourly Digest summary" },
-                { value: "daily", label: "Daily summary (07:00)" },
-                { value: "weekly", label: "Weekly summary (Mondays)" },
-              ]}
-            />
-          </div>
         </div>
         <div className="border-t border-[var(--border)]">
           <ToggleRow
@@ -2147,7 +2119,7 @@ function PayrollSection({
   onSettingChange: (key: keyof SystemSettings, val: string) => void;
 }) {
   const [exportHistory, setExportHistory] = useState<PayrollExportRecord[]>([]);
-  const format = settings.payroll_format || "csv";
+  const [exportMonth, setExportMonth] = useState(new Date().toISOString().slice(0, 7));
 
   const loadExports = () => {
     getPayrollExports()
@@ -2161,10 +2133,15 @@ function PayrollSection({
 
   const handleExportNow = async () => {
     try {
-      const periodLabel = `May 16–31, ${new Date().getFullYear()}`;
-      await createPayrollExport(periodLabel, format);
-      toast.success("Payroll export generated successfully");
+      const created = await createPayrollExport({
+        month: exportMonth,
+        period: exportMonth,
+        format: "csv",
+        finalize: true,
+      });
+      toast.success(`Payroll CSV generated for ${created.period}`);
       loadExports();
+      await downloadPayrollExport(created.id);
     } catch (err: any) {
       toast.error(err.message || "Failed to export payroll");
     }
@@ -2175,27 +2152,22 @@ function PayrollSection({
       <Card>
         <CardHeader
           title="Payroll Guidelines"
-          description="Configure formulas, rounding, and periods."
+          description="Rounding, pay cycle, and currency. Flat tax is informational (not PF/ESI)."
         />
         <div className="fams-settings-card-body fams-settings-grid fams-settings-grid-2">
           <div className="space-y-1.5">
-            <label className="fams-settings-label">Export Layout Format</label>
+            <label className="fams-settings-label">Export Format</label>
             <SelectInput
-              value={format}
-              onChange={(v) => onSettingChange("payroll_format", v)}
-              options={[
-                { value: "csv", label: "CSV Spreadsheets (Standard)" },
-                { value: "pdf", label: "PDF Analytical Report" },
-                { value: "workday", label: "Workday HR Integration XML" },
-                { value: "gusto", label: "Gusto Payroll JSON" },
-                { value: "adp", label: "ADP Workforce Connect API" },
-              ]}
+              value="csv"
+              onChange={() => onSettingChange("payroll_format", "csv")}
+              options={[{ value: "csv", label: "CSV (period salary register)" }]}
             />
+            <p className="fams-settings-hint">PDF and third-party formats are not available yet.</p>
           </div>
           <div className="space-y-1.5">
-            <label className="fams-settings-label">Roster Pay Cycle</label>
+            <label className="fams-settings-label">Default Pay Cycle</label>
             <SelectInput
-              value={settings.payroll_period || "biweekly"}
+              value={settings.payroll_period || "monthly"}
               onChange={(v) => onSettingChange("payroll_period", v)}
               options={[
                 { value: "weekly", label: "Weekly cycle" },
@@ -2213,13 +2185,10 @@ function PayrollSection({
               value={settings.payroll_rounding || "nearest_15"}
               onChange={(v) => onSettingChange("payroll_rounding", v)}
               options={[
-                { value: "exact", label: "Exact (Track down to the second)" },
-                { value: "nearest_5", label: "Nearest 5 minute increments" },
-                {
-                  value: "nearest_15",
-                  label: "FLSA 7/8 nearest 15-min guideline",
-                },
-                { value: "nearest_30", label: "Nearest 30 minute blocks" },
+                { value: "exact", label: "Exact (no rounding)" },
+                { value: "nearest_5", label: "Nearest 5 minutes" },
+                { value: "nearest_15", label: "Nearest 15 minutes" },
+                { value: "nearest_30", label: "Nearest 30 minutes" },
               ]}
             />
           </div>
@@ -2228,84 +2197,65 @@ function PayrollSection({
               Reporting Base Currency
             </label>
             <SelectInput
-              value={settings.payroll_currency || "USD"}
+              value={settings.payroll_currency || "INR"}
               onChange={(v) => onSettingChange("payroll_currency", v)}
               options={[
+                { value: "INR", label: "INR — Indian Rupee (₹)" },
                 { value: "USD", label: "USD — United States Dollar ($)" },
-                { value: "EUR", label: "EUR — European Union Euro (€)" },
-                { value: "GBP", label: "GBP — United Kingdom Pound (£)" },
-                { value: "PHP", label: "PHP — Philippine Peso (₱)" },
-                { value: "MXN", label: "MXN — Mexican Peso ($)" },
+                { value: "EUR", label: "EUR — Euro (€)" },
+                { value: "GBP", label: "GBP — Pound (£)" },
               ]}
             />
           </div>
           <div className="space-y-1.5">
-            <label className="fams-settings-label">Calculated Tax Rate</label>
+            <label className="fams-settings-label">Flat Tax Rate (informational)</label>
             <NumberInput
-              value={settings.payroll_tax_rate || "22"}
+              value={settings.payroll_tax_rate || "0"}
               onChange={(v) => onSettingChange("payroll_tax_rate", v)}
               suffix="%"
             />
           </div>
-          {settings.payroll_auto_export === "true" && (
-            <div className="space-y-1.5 animate-fade-in">
-              <label className="fams-settings-label">
-                Scheduled Auto-Export Time
-              </label>
-              <input
-                type="time"
-                value={settings.payroll_export_time || "07:00"}
-                onChange={(e) =>
-                  onSettingChange("payroll_export_time", e.target.value)
-                }
-                className="w-full px-3.5 py-2.5 text-sm text-[var(--text)] border border-[var(--border)] rounded-[var(--radius)] bg-white outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/10 transition-all duration-200"
-              />
-            </div>
-          )}
         </div>
         <div className="border-t border-[var(--border)]">
           <ToggleRow
-            title="Subtract Rest Periods"
-            description="Subtract logged break event times from total paid durations."
-            checked={settings.payroll_deduct_breaks === "true"}
-            onChange={(v) =>
-              onSettingChange("payroll_deduct_breaks", v ? "true" : "false")
-            }
-          />
-          <ToggleRow
-            title="Isolate Overtime Details"
-            description="Log separate overtime sheets calculated using wage multipliers."
-            checked={settings.payroll_include_overtime === "true"}
+            title="Include Overtime Pay"
+            description="When off, overtime hours are not paid (still shown in breakdown). OT pay uses each worker’s overtime rate (₹/hr) from their profile."
+            checked={settings.payroll_include_overtime !== "false"}
             onChange={(v) =>
               onSettingChange("payroll_include_overtime", v ? "true" : "false")
             }
-          />
-          <ToggleRow
-            title="Encrypt Export Documents (AES-256)"
-            description="Password-protect exports containing private salary information."
-            checked={settings.payroll_encrypt === "true"}
-            onChange={(v) =>
-              onSettingChange("payroll_encrypt", v ? "true" : "false")
-            }
-            tag={{ label: "Recommended", color: "amber" }}
-          />
-          <ToggleRow
-            title="Automated Period Exports"
-            description="Trigger export generation on shift pay-period conclusions."
-            checked={settings.payroll_auto_export === "true"}
-            onChange={(v) =>
-              onSettingChange("payroll_auto_export", v ? "true" : "false")
-            }
             last
           />
+        </div>
+        <div className="px-6 py-4 border-t border-[var(--border)] bg-[var(--gray-50)]">
+          <p className="text-xs text-[var(--muted)]">
+            Break deductions use Operational Rules. Overtime pay = OT hours × worker overtime rate. Holiday multipliers apply to daily wage only and need dates in holiday_calendar.
+          </p>
         </div>
       </Card>
 
       <Card>
         <CardHeader
           title="Saved Exports"
-          description="Immutable records generated by this terminal node."
+          description="Period CSV exports. Finalized periods lock overrides until unfinalized from Salary."
         />
+        <div className="px-6 py-4 border-b border-[var(--border)] flex flex-wrap gap-3 items-end">
+          <div className="space-y-1.5">
+            <label className="fams-settings-label">Month to export</label>
+            <input
+              type="month"
+              value={exportMonth}
+              onChange={(e) => setExportMonth(e.target.value)}
+              className="fams-input w-auto"
+            />
+          </div>
+          <button
+            onClick={handleExportNow}
+            className="flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-[var(--text)] hover:bg-[var(--gray-800)] rounded-[var(--radius)] transition-colors cursor-pointer"
+          >
+            <Download size={14} /> Export &amp; finalize CSV
+          </button>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm border-collapse">
             <thead>
@@ -2346,7 +2296,9 @@ function PayrollSection({
                     {r.workerCount} workers
                   </td>
                   <td className="px-6 py-4">
-                    <StatusBadge status="active" />
+                    <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                      {r.status}
+                    </span>
                   </td>
                   <td className="px-6 py-4">
                     <button
@@ -2370,19 +2322,6 @@ function PayrollSection({
               )}
             </tbody>
           </table>
-        </div>
-        <div className="px-6 py-4 bg-[var(--gray-50)] border-t border-[var(--border)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <p className="text-xs font-semibold text-[var(--muted)] leading-normal">
-            {exportHistory.length > 0
-              ? `Last generated export: ${new Date(exportHistory[0].generatedAt).toLocaleDateString()} for ${exportHistory[0].workerCount} workers.`
-              : "No exports compiled yet."}
-          </p>
-          <button
-            onClick={handleExportNow}
-            className="flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-[var(--text)] hover:bg-[var(--gray-800)] rounded-[var(--radius)] transition-colors cursor-pointer"
-          >
-            <Download size={14} /> Export Current Roster Now
-          </button>
         </div>
       </Card>
     </div>
@@ -2410,64 +2349,14 @@ function AuditSection({
     <div className="fams-settings-stack">
       <Card>
         <CardHeader
-          title="Compliance Mandates"
-          description="Set log lifespans, residencies, and data privacy options."
+          title="Compliance"
+          description="Audit export and recent events."
         />
-        <div className="fams-settings-card-body fams-settings-grid fams-settings-grid-2">
-          <div className="space-y-1.5">
-            <label className="fams-settings-label">Audit Log Lifespan</label>
-            <NumberInput
-              value={settings.audit_retention_days || "730"}
-              onChange={(v) => onSettingChange("audit_retention_days", v)}
-              suffix="days"
-            />
-            <p className="fams-settings-hint">
-              730-day guidelines are required under labor statutes.
-            </p>
-          </div>
-          <div className="space-y-1.5">
-            <label className="fams-settings-label">Data Residency Scope</label>
-            <SelectInput
-              value={settings.audit_data_residency || "on-premise"}
-              onChange={(v) => onSettingChange("audit_data_residency", v)}
-              options={[
-                {
-                  value: "eu-west-1",
-                  label: "EU West (Dublin) — GDPR aligned",
-                },
-                { value: "us-east-1", label: "US East (N. Virginia)" },
-                { value: "ap-southeast-1", label: "Asia Pacific (Singapore)" },
-                {
-                  value: "on-premise",
-                  label: "On-Premise (Local storage node)",
-                },
-              ]}
-            />
-          </div>
-        </div>
-        <div className="border-t border-[var(--border)]">
-          <ToggleRow
-            title="Immutable Compliance Logging"
-            description="Disallow modification or deletion of logged system events."
-            checked={settings.audit_immutable === "true"}
-            onChange={(v) =>
-              onSettingChange("audit_immutable", v ? "true" : "false")
-            }
-            tag={{ label: "Required", color: "red" }}
-          />
-          <ToggleRow
-            title="GDPR Erase Workflows"
-            description="Grant workers rights to request biometric scrubbing workflows."
-            checked={settings.audit_gdpr_mode === "true"}
-            onChange={(v) =>
-              onSettingChange("audit_gdpr_mode", v ? "true" : "false")
-            }
-            tag={{ label: "GDPR", color: "blue" }}
-          />
+        <div className="border-t-0">
           <ToggleRow
             title="Export Compliance Archives"
-            description="Enable administrators to download cryptographically signed audits."
-            checked={settings.audit_export_enabled === "true"}
+            description="Enable administrators to download audit logs."
+            checked={settings.audit_export_enabled !== "false"}
             onChange={(v) =>
               onSettingChange("audit_export_enabled", v ? "true" : "false")
             }
@@ -2753,7 +2642,7 @@ function SystemSection({
           title="Throttling & Debug Logs"
           description="Configure request rate limiting parameters."
         />
-        <div className="fams-settings-card-body fams-settings-grid fams-settings-grid-3">
+        <div className="fams-settings-card-body fams-settings-grid fams-settings-grid-2">
           <div className="space-y-1.5">
             <label className="fams-settings-label">Rate Limiting Window</label>
             <NumberInput
@@ -2770,32 +2659,6 @@ function SystemSection({
               suffix="reqs"
             />
           </div>
-          <div className="space-y-1.5">
-            <label className="fams-settings-label">
-              Server Debug Log Level
-            </label>
-            <SelectInput
-              value={settings.sys_log_level || "warn"}
-              onChange={(v) => onSettingChange("sys_log_level", v)}
-              options={[
-                { value: "error", label: "error logs only" },
-                { value: "warn", label: "warnings & errors" },
-                { value: "info", label: "informational logs" },
-                { value: "debug", label: "debug (verbose trace)" },
-              ]}
-            />
-          </div>
-        </div>
-        <div className="border-t border-[var(--border)]">
-          <ToggleRow
-            title="Gzip Response Compression"
-            description="Compress outbound payloads to reduce network bandwidth limits."
-            checked={settings.sys_compression === "true"}
-            onChange={(v) =>
-              onSettingChange("sys_compression", v ? "true" : "false")
-            }
-            last
-          />
         </div>
       </Card>
     </div>
@@ -2930,483 +2793,99 @@ function DangerSection({
   );
 }
 
-// ── Section: Mobile Terminals ──────────────────────────────────────────────────
+// ── Section: Floor Kiosk (PWA) ─────────────────────────────────────────────────
 
-function TerminalsSection({
-  settings,
-  onSettingChange,
-}: {
-  settings: SystemSettings;
-  onSettingChange: (key: keyof SystemSettings, val: string) => void;
-}) {
-  const [terminals, setTerminals] = useState<MobileTerminal[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [pairingModal, setPairingModal] = useState({
-    open: false,
-    name: "",
-    code: "",
-    id: "",
-    success: false,
-  });
+function TerminalsSection() {
+  const kioskUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/kiosk`
+      : "/kiosk";
 
-  const loadTerminals = async () => {
-    setLoading(true);
-    try {
-      const list = await getTerminals();
-      setTerminals(list);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to load mobile terminal nodes");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadTerminals();
-  }, []);
-
-  const handleGenerateCode = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!pairingModal.name.trim())
-      return toast.error("Please enter a unique terminal name");
-    try {
-      const res = await generateTerminalCode(pairingModal.name);
-      setPairingModal((prev) => ({
-        ...prev,
-        code: res.pairingCode,
-        id: res.terminalId,
-        success: true,
-      }));
-      toast.success(res.message || "Pairing code generated successfully");
-      loadTerminals();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to generate pairing code");
-    }
-  };
-
-  const handleRevoke = async (id: string, name: string) => {
-    if (
-      !confirm(
-        `Are you absolutely sure you want to revoke the terminal "${name}"? This device will immediately be logged out and cannot sync or upload offline queue logs.`,
-      )
-    )
-      return;
-    try {
-      await revokeTerminal(id);
-      toast.success(`Terminal "${name}" successfully revoked`);
-      loadTerminals();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to revoke terminal");
-    }
+  const copyKioskUrl = () => {
+    navigator.clipboard.writeText(kioskUrl);
+    toast.success("Kiosk URL copied");
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="fams-settings-stack">
       <Card>
         <CardHeader
-          title="Paired Mobile Terminals"
-          description="Live status, battery health, and sync logs from APK scanners."
-          action={
-            <div className="flex gap-2">
-              <button
-                onClick={loadTerminals}
-                disabled={loading}
-                className="p-2 rounded-[var(--radius)] text-[var(--muted)] hover:bg-[var(--gray-100)] hover:text-[var(--text)] transition-colors disabled:opacity-50 cursor-pointer"
-                title="Refresh terminal status"
-              >
-                <RefreshCw
-                  size={16}
-                  className={loading ? "animate-spin" : ""}
-                />
-              </button>
-              <button
-                onClick={() =>
-                  setPairingModal({
-                    open: true,
-                    name: "",
-                    code: "",
-                    id: "",
-                    success: false,
-                  })
-                }
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-[var(--accent)] bg-[#EFF6FF] border border-[color-mix(in_srgb,var(--accent)_15%,var(--border))] hover:bg-[#DBEAFE] rounded-[var(--radius)] transition-all duration-150 cursor-pointer"
-              >
-                <Plus size={14} /> Add APK Terminal
-              </button>
-            </div>
-          }
+          title="Floor attendance kiosk"
+          description="Tablets use the same FAMS web app as a Progressive Web App — no Android APK."
         />
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="border-b border-[var(--border)] bg-[var(--gray-50)]">
-                {[
-                  "Terminal Node",
-                  "Status",
-                  "Proximity UUID",
-                  "Battery",
-                  "Sync Queue",
-                  "Last Seen",
-                  "Actions",
-                ].map((h) => (
-                  <th
-                    key={h}
-                    className="text-left px-6 py-3.5 text-[10px] font-bold text-[var(--muted)] uppercase tracking-widest"
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--border)]">
-              {terminals.map((t) => (
-                <tr
-                  key={t.id}
-                  className="hover:bg-[var(--gray-50)] transition-colors"
-                >
-                  <td className="px-6 py-4">
-                    <div>
-                      <p className="font-bold text-[var(--text)] flex items-center gap-1.5">
-                        {t.name}
-                        {t.isOnline ? (
-                          <span
-                            className="w-2 h-2 rounded-full bg-[var(--success)]"
-                            title="Online"
-                          />
-                        ) : (
-                          <span
-                            className="w-2 h-2 rounded-full bg-[var(--gray-300)]"
-                            title="Offline"
-                          />
-                        )}
-                      </p>
-                      <p className="fams-settings-hint font-medium">
-                        {t.deviceModel || "Unpaired Slot"}
-                      </p>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <StatusBadge
-                      status={t.status === "revoked" ? "inactive" : t.status}
-                    />
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="text-xs font-mono bg-[var(--gray-50)] px-2 py-1 border border-[var(--border)] rounded text-[var(--muted)]">
-                      {t.bluetoothUuid || "—"}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    {t.batteryLevel != null ? (
-                      <div className="flex items-center gap-1.5 text-[var(--neutral)] font-semibold text-xs">
-                        <Battery
-                          size={14}
-                          className={
-                            t.batteryLevel < 20
-                              ? "text-rose-500"
-                              : "text-[var(--muted)]"
-                          }
-                        />
-                        {t.batteryLevel}%
-                      </div>
-                    ) : (
-                      <span className="text-[var(--muted)] text-xs">—</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    {t.pendingQueueSize != null ? (
-                      <div>
-                        <span
-                          className={`text-xs font-mono font-bold px-2 py-0.5 rounded-full ${t.pendingQueueSize > 50 ? "bg-amber-50 text-amber-700 border border-amber-200" : "bg-[var(--gray-50)] text-[var(--neutral)] border border-[var(--border)]"}`}
-                        >
-                          {t.pendingQueueSize} queued
-                        </span>
-                      </div>
-                    ) : (
-                      <span className="text-[var(--muted)] text-xs">—</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-xs font-medium text-[var(--muted)]">
-                    {t.lastSeenAt
-                      ? new Date(t.lastSeenAt).toLocaleString()
-                      : "Never"}
-                  </td>
-                  <td className="px-6 py-4">
-                    {t.status !== "revoked" && (
-                      <button
-                        onClick={() => handleRevoke(t.id, t.name)}
-                        className="text-xs font-bold text-[var(--danger)] hover:opacity-80 bg-transparent border-none cursor-pointer transition-colors"
-                      >
-                        Revoke
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {terminals.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={7}
-                    className="px-6 py-8 text-center text-[var(--muted)] font-medium"
-                  >
-                    No mobile terminal slots configured yet. Pair an APK tablet
-                    to synchronize factory attendance logs.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <div className="fams-settings-card-body space-y-5">
+          <InfoBox type="info">
+            Open <span className="font-mono font-semibold">/kiosk</span> on each
+            factory tablet, then Add to Home Screen (Chrome / Safari). The
+            installed icon launches straight into the scanner — same look and
+            settings as the admin app.
+          </InfoBox>
+
+          <ol className="space-y-3 text-sm text-[var(--text)] list-decimal pl-5">
+            <li>
+              Prefer <span className="font-semibold">HTTPS</span> in production
+              so the camera is allowed (browsers block insecure camera access).
+            </li>
+            <li>
+              On factory Wi‑Fi the device usually unlocks automatically. Off-site,
+              an admin unlocks once with Google under the kiosk screen.
+            </li>
+            <li>
+              Tune recognition and display under{" "}
+              <span className="font-semibold">AI &amp; Kiosk</span>. Manage the
+              shared device token under{" "}
+              <span className="font-semibold">Security</span>.
+            </li>
+            <li>
+              Regenerating the kiosk token forces every tablet to unlock again.
+            </li>
+          </ol>
+
+          <div className="flex flex-wrap gap-2 pt-1">
+            <button
+              type="button"
+              onClick={copyKioskUrl}
+              className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-[var(--neutral)] border border-[var(--border)] hover:bg-[var(--gray-100)] bg-white rounded-[var(--radius)] transition-all cursor-pointer"
+            >
+              <Copy size={13} /> Copy kiosk URL
+            </button>
+            <a
+              href="/kiosk"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-[var(--radius)] transition-all no-underline"
+            >
+              <ExternalLink size={13} /> Open kiosk
+            </a>
+          </div>
+
+          <p className="fams-settings-hint font-mono break-all">{kioskUrl}</p>
         </div>
       </Card>
 
       <Card>
         <CardHeader
-          title="Sync & Connection Configurations"
-          description="Roster intervals, speech settings, and BLE proximity ranges for the mobile APK."
+          title="Install on a tablet"
+          description="Chrome on Android or Safari on iPad."
         />
-        <div className="fams-settings-card-body fams-settings-grid fams-settings-grid-2">
-          {[
-            {
-              label: "Cloud Synchronize Cadence",
-              value: settings.mobile_sync_interval_sec || "60",
-              set: (v: string) =>
-                onSettingChange("mobile_sync_interval_sec", v),
-              suffix: "seconds",
-              hint: "WiFi background sync polling cadence.",
-            },
-            {
-              label: "Device Heartbeat Cadence",
-              value: settings.mobile_heartbeat_interval_sec || "60",
-              set: (v: string) =>
-                onSettingChange("mobile_heartbeat_interval_sec", v),
-              suffix: "seconds",
-              hint: "Cadence to report battery & queue status.",
-            },
-            {
-              label: "Max Buffer Queue Alert",
-              value: settings.mobile_offline_queue_max || "500",
-              set: (v: string) =>
-                onSettingChange("mobile_offline_queue_max", v),
-              suffix: "records",
-              hint: "Trigger warning when offline queue exceeds this cap.",
-            },
-            {
-              label: "Offline Timeout Window",
-              value: settings.mobile_offline_timeout_min || "5",
-              set: (v: string) =>
-                onSettingChange("mobile_offline_timeout_min", v),
-              suffix: "minutes",
-              hint: "Mark device offline after this silence window.",
-            },
-            {
-              label: "Proximity Broadcast Identifier",
-              value: settings.mobile_ble_broadcast_name || "FAMS-Kiosk",
-              set: (v: string) =>
-                onSettingChange("mobile_ble_broadcast_name", v),
-              suffix: "prefix",
-              type: "text",
-              hint: "Prefix advertised by tablet BLE beacons.",
-            },
-          ].map(({ label, value, set, suffix, type, hint }) => (
-            <div key={label} className="space-y-1.5">
-              <label className="fams-settings-label">{label}</label>
-              {type === "text" ? (
-                <TextInput value={value} onChange={set} />
-              ) : (
-                <NumberInput value={value} onChange={set} suffix={suffix} />
-              )}
-              <p className="fams-settings-hint">{hint}</p>
-            </div>
-          ))}
-
-          <div className="space-y-1.5">
-            <label className="fams-settings-label">
-              On-Device Matching Architecture
-            </label>
-            <SelectInput
-              value={settings.mobile_face_model || "mobilefacenet"}
-              onChange={(v) => onSettingChange("mobile_face_model", v)}
-              options={[
-                {
-                  value: "mobilefacenet",
-                  label: "MobileFaceNet v2 (Optimized for Android)",
-                },
-                {
-                  value: "arcface",
-                  label: "ArcFace Edge (High accuracy, requires GPU)",
-                },
-              ]}
-            />
-            <p className="fams-settings-hint">
-              Select weight size loaded on APK local model cache.
+        <div className="fams-settings-card-body space-y-4 text-sm text-[var(--muted)] leading-relaxed">
+          <div>
+            <p className="font-bold text-[var(--text)] mb-1">Android (Chrome)</p>
+            <p>
+              Open the kiosk URL → menu → <em>Install app</em> or{" "}
+              <em>Add to Home screen</em>. Launch from the home-screen icon for a
+              full-screen, app-like scanner.
+            </p>
+          </div>
+          <div>
+            <p className="font-bold text-[var(--text)] mb-1">iPad (Safari)</p>
+            <p>
+              Open the kiosk URL → Share → <em>Add to Home Screen</em>. Use the
+              home-screen icon so the kiosk runs without Safari chrome.
             </p>
           </div>
         </div>
-
-        <div className="border-t border-[var(--border)]">
-          <ToggleRow
-            title="Enable BLE Proximity Discovery"
-            description="Broadcast BLE beacon beacons so supervisor phones can auto-discover and pair with this node Proximity."
-            checked={settings.mobile_ble_enabled === "true"}
-            onChange={(v) =>
-              onSettingChange("mobile_ble_enabled", v ? "true" : "false")
-            }
-          />
-          <ToggleRow
-            title="Enable Text-to-Speech Speech Synthesis"
-            description="Use Android System TTS to read aloud greeting cards ('Welcome in, Employee Name') on scan."
-            checked={settings.mobile_tts_enabled === "true"}
-            onChange={(v) =>
-              onSettingChange("mobile_tts_enabled", v ? "true" : "false")
-            }
-          />
-          <ToggleRow
-            title="Supervisor Override Offline Pin"
-            description="Allows supervisor to input their numeric PIN on local offline tablets to override clock-ins."
-            checked={settings.mobile_pin_override_enabled === "true"}
-            onChange={(v) =>
-              onSettingChange(
-                "mobile_pin_override_enabled",
-                v ? "true" : "false",
-              )
-            }
-          />
-          <ToggleRow
-            title="Auto Synchronize Instantly on WiFi Connect"
-            description="Force immediate sync pipeline whenever the android device reconnects to a secure Wi-Fi network."
-            checked={settings.mobile_auto_sync_on_wifi === "true"}
-            onChange={(v) =>
-              onSettingChange("mobile_auto_sync_on_wifi", v ? "true" : "false")
-            }
-            last
-          />
-        </div>
       </Card>
-
-      {/* Pairing Modal */}
-      {pairingModal.open && (
-        <div className="fixed inset-0 rgba(28, 25, 23, 0.45) backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-white rounded-[8px] border border-[var(--border)] w-full max-w-md overflow-hidden animate-scale-up">
-            <div className="flex justify-between items-center px-6 py-5 border-b border-[var(--border)] bg-[var(--gray-50)]">
-              <h2 className="text-base font-extrabold text-[var(--text)]">
-                Pair Brand New Mobile Terminal Slot
-              </h2>
-              <button
-                onClick={() =>
-                  setPairingModal({
-                    open: false,
-                    name: "",
-                    code: "",
-                    id: "",
-                    success: false,
-                  })
-                }
-                className="p-1 rounded-full text-[var(--muted)] hover:bg-[var(--gray-100)] hover:text-[var(--text)] transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {!pairingModal.success ? (
-              <form
-                onSubmit={handleGenerateCode}
-                className="fams-settings-card-body space-y-4"
-              >
-                <div className="space-y-1.5">
-                  <label className="fams-settings-label">
-                    Terminal Roster Name
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={pairingModal.name}
-                    onChange={(e) =>
-                      setPairingModal({ ...pairingModal, name: e.target.value })
-                    }
-                    className="w-full px-3.5 py-2.5 text-sm text-[var(--text)] border border-[var(--border)] rounded-[var(--radius)] bg-white focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/10 outline-none transition-all duration-200"
-                    placeholder="e.g. Warehouse 3 Roster Tablet"
-                  />
-                  <p className="fams-settings-hint">
-                    Assign a distinct, friendly name for attendance logs filter
-                    views.
-                  </p>
-                </div>
-
-                <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPairingModal({
-                        open: false,
-                        name: "",
-                        code: "",
-                        id: "",
-                        success: false,
-                      })
-                    }
-                    className="flex-1 py-2.5 text-[var(--neutral)] border border-[var(--border)] hover:bg-[var(--gray-50)] font-bold text-sm rounded-[var(--radius)] cursor-pointer transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex-1 py-2.5 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white font-bold text-sm rounded-[var(--radius)] cursor-pointer transition-all duration-150"
-                  >
-                    Generate Pairing Code
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <div className="p-6 text-center space-y-5">
-                <div className="py-2">
-                  <span className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[color-mix(in_srgb,var(--success)_10%,var(--surface))] text-[var(--success)] border border-[color-mix(in_srgb,var(--success)_25%,var(--border))]">
-                    <CheckCircle2 size={24} />
-                  </span>
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-[var(--text)] text-base">
-                    Enter Code on FAMS APK Screen
-                  </h3>
-                  <p className="text-xs text-[var(--muted)] mt-1 leading-relaxed">
-                    Open the FAMS Attendance APK app on your device. On the
-                    Pairing Setup Screen, type the following six-digit numeric
-                    authorization pairing code:
-                  </p>
-                </div>
-
-                <div className="bg-[var(--gray-50)] border border-[var(--border)] rounded-[8px] py-6 my-2 shadow-inner/5">
-                  <span className="text-3xl font-black text-[var(--text)] tracking-widest font-mono select-all">
-                    {pairingModal.code}
-                  </span>
-                </div>
-
-                <div className="fams-settings-hint bg-[var(--gray-50)] border border-[var(--border)] rounded-[var(--radius)] p-3 text-left">
-                  <span className="font-bold text-[var(--muted)] uppercase tracking-wide block mb-0.5">
-                    Integration Guidelines:
-                  </span>
-                  The pairing code remains active for 15 minutes. Once entered
-                  on the device, pairing establishes secure encrypted tokens
-                  deterministically mapping to this slot.
-                </div>
-
-                <button
-                  onClick={() =>
-                    setPairingModal({
-                      open: false,
-                      name: "",
-                      code: "",
-                      id: "",
-                      success: false,
-                    })
-                  }
-                  className="w-full py-2.5 bg-[var(--text)] hover:bg-[var(--gray-800)] text-white font-bold text-sm rounded-[var(--radius)] cursor-pointer transition-all duration-150"
-                >
-                  Done
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -3428,7 +2907,7 @@ export function Settings() {
     perm_supervisor_worker_view: "true",
     perm_supervisor_worker_delete: "false",
     perm_supervisor_correction_approve: "true",
-    ai_threshold: "0.6",
+    ai_threshold: "0.55",
   });
   const [saved, setSaved] = useState(false);
   const [saveStatus, setSaveStatus] = useState<
@@ -3568,19 +3047,17 @@ export function Settings() {
         <DangerSection onFactoryReset={handleFactoryReset} />
       </span>
     ),
-    terminals: (
-      <TerminalsSection
-        settings={settings}
-        onSettingChange={handleSettingChange}
-      />
-    ),
+    terminals: <TerminalsSection />,
   };
 
   const activeItem = navGroups
     .flatMap((g) => g.items)
     .find((i) => i.id === active)!;
   const showSaveButton =
-    active !== "danger" && active !== "profile" && active !== "integrations";
+    active !== "danger" &&
+    active !== "profile" &&
+    active !== "integrations" &&
+    active !== "terminals";
 
   return (
     <div className="fams-settings-layout">
