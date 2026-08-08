@@ -832,6 +832,7 @@ export function KioskMode() {
         <span className="fams-kiosk-chrome-sub">Floor kiosk</span>
       </div>
       <div className="fams-kiosk-chrome-meta">
+        <PwaInstallButton variant="chrome" />
         <span className="fams-kiosk-clock">{clock}</span>
         <span className={`fams-kiosk-badge ${online ? 'is-online' : 'is-offline'}`}>
           {online ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}

@@ -2811,15 +2811,27 @@ function TerminalsSection() {
     <div className="fams-settings-stack">
       <Card>
         <CardHeader
+          title="Install on this device"
+          description="Put FAMS on the tablet home screen like an app."
+        />
+        <div className="fams-settings-card-body space-y-3">
+          <PwaInstallButton variant="settings" />
+          <p className="fams-settings-hint">
+            Best on the tablet itself: open this page in Chrome over HTTPS, then tap the button.
+            On iPad use Share → Add to Home Screen.
+          </p>
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader
           title="Floor attendance kiosk"
           description="Tablets use the same FAMS web app as a Progressive Web App — no Android APK."
         />
         <div className="fams-settings-card-body space-y-5">
           <InfoBox type="info">
             Open <span className="font-mono font-semibold">/kiosk</span> on each
-            factory tablet, then Add to Home Screen (Chrome / Safari). The
-            installed icon launches straight into the scanner — same look and
-            settings as the admin app.
+            factory tablet. The installed icon launches straight into the scanner.
           </InfoBox>
 
           <ol className="space-y-3 text-sm text-[var(--text)] list-decimal pl-5">
@@ -2843,7 +2855,6 @@ function TerminalsSection() {
           </ol>
 
           <div className="flex flex-wrap gap-2 pt-1 items-center">
-            <PwaInstallButton variant="settings" />
             <button
               type="button"
               onClick={copyKioskUrl}
