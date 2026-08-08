@@ -1,5 +1,10 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { completeOnboarding as apiCompleteOnboarding, getSession, logout as apiLogout } from '../../api/client';
+import {
+  completeOnboarding as apiCompleteOnboarding,
+  getSession,
+  logout as apiLogout,
+  setStoredSessionToken,
+} from '../../api/client';
 
 export interface User {
   id: string;
@@ -23,6 +28,7 @@ interface AuthContextType {
   completeOnboarding: () => Promise<void>;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  authReady: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -30,10 +36,12 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
     // Kiosk is device-token auth; skip admin session probe (expected 403 without login).
     if (window.location.pathname.startsWith('/kiosk')) {
+      setAuthReady(true);
       return;
     }
 
@@ -47,15 +55,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .catch(() => {
         setUser(null);
         setToken(null);
+        setStoredSessionToken(null);
         if (storedUser) localStorage.removeItem('fams_user');
-      });
+      })
+      .finally(() => setAuthReady(true));
   }, []);
 
-  const login = (newUser: User, _newToken: string) => {
+  const login = (newUser: User, newToken: string) => {
     setUser(newUser);
-    // The backend sets an HttpOnly session cookie. Keep the returned token only for
-    // native clients; never persist it in browser storage.
     setToken('cookie-session');
+    // Keep JWT for Authorization header — cookie alone can fail through Vercel→Render rewrites.
+    if (newToken) setStoredSessionToken(newToken);
     localStorage.setItem('fams_user', JSON.stringify(newUser));
   };
 
@@ -79,8 +89,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     apiLogout().catch(() => {}).finally(() => {
       setUser(null);
       setToken(null);
+      setStoredSessionToken(null);
       localStorage.removeItem('fams_user');
-      window.location.assign('/');
+      window.location.assign('/login');
     });
   };
 
@@ -93,7 +104,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       updateUser,
       completeOnboarding,
       isAuthenticated: !!token,
-      isAdmin: user?.role === 'admin'
+      isAdmin: user?.role === 'admin',
+      authReady,
     }}>
       {children}
     </AuthContext.Provider>

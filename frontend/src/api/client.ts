@@ -1,9 +1,26 @@
 const API_BASE = '/api';
+const SESSION_TOKEN_KEY = 'fams_session_token';
+
+export function getStoredSessionToken(): string | null {
+  try {
+    return sessionStorage.getItem(SESSION_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredSessionToken(token: string | null): void {
+  try {
+    if (token) sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+    else sessionStorage.removeItem(SESSION_TOKEN_KEY);
+  } catch {
+    /* private mode */
+  }
+}
 
 async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  // Browser sessions use an HttpOnly cookie. Only attach the kiosk device token
-  // on the standalone kiosk surface — otherwise it steals Authorization and
-  // breaks admin routes (e.g. change-password → "User not found").
+  // Prefer HttpOnly cookie; also send Bearer JWT so Vercel→Render proxy sessions stay alive
+  // if Set-Cookie is dropped. Kiosk uses the device token instead.
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...options?.headers,
@@ -15,6 +32,11 @@ async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T>
     if (token) {
       (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
     }
+  } else {
+    const sessionToken = getStoredSessionToken();
+    if (sessionToken && !(headers as Record<string, string>)['Authorization']) {
+      (headers as Record<string, string>)['Authorization'] = `Bearer ${sessionToken}`;
+    }
   }
 
   const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -25,6 +47,7 @@ async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T>
   if (!response.ok) {
     if (response.status === 401) {
       localStorage.removeItem('fams_user');
+      setStoredSessionToken(null);
       const publicPaths = ['/', '/login', '/setup', '/forgot-password', '/kiosk'];
       if (!publicPaths.includes(window.location.pathname)) {
         window.location.href = '/login';

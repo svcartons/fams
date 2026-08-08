@@ -1499,6 +1499,20 @@ body, * {
 .fams-welcome-cta:hover { background: var(--accent-hover); color: #fff; }
 .fams-welcome-cta svg { width: 17px; height: 17px; }
 
+.fams-welcome-hint {
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.fams-welcome--loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: var(--canvas);
+}
+
 .fams-welcome-status {
   position: absolute;
   z-index: 1;

@@ -24,9 +24,17 @@ function AuthRedirect({ children }: { children: React.ReactNode }) {
 }
 
 function ProtectedShell() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, authReady } = useAuth();
   const [tourDismissed, setTourDismissed] = useState(false);
   const handleTourComplete = useCallback(() => setTourDismissed(true), []);
+
+  if (!authReady) {
+    return (
+      <div className="fams-page flex items-center justify-center min-h-screen">
+        <p className="text-[13px] text-[var(--muted)]">Loading…</p>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) return <Navigate to="/login" replace />;
 
@@ -49,7 +57,7 @@ function ProtectedShell() {
 
 function AdminGate({ children }: { children: React.ReactNode }) {
   const { isAdmin } = useAuth();
-  if (!isAdmin) return <Navigate to="/" replace />;
+  if (!isAdmin) return <Navigate to="/today" replace />;
   return <>{children}</>;
 }
 
@@ -83,7 +91,7 @@ export default function App() {
             <Route path="/settings" element={<AdminGate><Settings /></AdminGate>} />
           </Route>
 
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </Suspense>
     </div>
