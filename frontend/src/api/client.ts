@@ -1,6 +1,10 @@
 const API_BASE = '/api';
 const SESSION_TOKEN_KEY = 'fams_session_token';
 
+type FetchJsonOptions = RequestInit & {
+  redirectOnUnauthorized?: boolean;
+};
+
 export function getStoredSessionToken(): string | null {
   try {
     return sessionStorage.getItem(SESSION_TOKEN_KEY);
@@ -18,7 +22,7 @@ export function setStoredSessionToken(token: string | null): void {
   }
 }
 
-async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T> {
+async function fetchJson<T>(endpoint: string, options?: FetchJsonOptions): Promise<T> {
   // Prefer HttpOnly cookie; also send Bearer JWT so Vercel→Render proxy sessions stay alive
   // if Set-Cookie is dropped. Kiosk uses the device token instead.
   const headers: HeadersInit = {
@@ -39,15 +43,17 @@ async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T>
     }
   }
 
+  const { redirectOnUnauthorized = true, ...requestOptions } = options ?? {};
   const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
+    ...requestOptions,
     credentials: 'include',
     headers,
   });
   if (!response.ok) {
-    if (response.status === 401) {
+    if (response.status === 401 && redirectOnUnauthorized) {
       localStorage.removeItem('fams_user');
       setStoredSessionToken(null);
+      window.dispatchEvent(new Event('fams:session-invalidated'));
       const publicPaths = ['/', '/login', '/setup', '/forgot-password', '/kiosk'];
       if (!publicPaths.includes(window.location.pathname)) {
         window.location.href = '/login';
@@ -83,12 +89,14 @@ export const login = (username: string, password: string, otp?: string) =>
   fetchJson<{ token: string; user: AuthUser }>('/auth/login', {
     method: 'POST',
     body: JSON.stringify({ username, password, otp }),
+    redirectOnUnauthorized: false,
   });
 
 export const googleLogin = (credential: string, otp?: string) =>
   fetchJson<{ token: string; user: AuthUser }>('/auth/google', {
     method: 'POST',
     body: JSON.stringify({ credential, otp }),
+    redirectOnUnauthorized: false,
   });
 
 /** Unlock a remote PWA/phone kiosk with an authorized Google admin account. */
@@ -105,16 +113,20 @@ export type PublicAuthConfig = {
 };
 
 export const getAuthConfig = () =>
-  fetchJson<PublicAuthConfig>('/auth/config');
+  fetchJson<PublicAuthConfig>('/auth/config', { redirectOnUnauthorized: false });
 
 // Retained for kiosk pairing until that flow adopts the public auth config.
 export const getGoogleClientId = () =>
-  fetchJson<{ clientId: string | null }>('/auth/google-client-id');
+  fetchJson<{ clientId: string | null }>('/auth/google-client-id', { redirectOnUnauthorized: false });
 
 export const getSession = () =>
-  fetchJson<{ user: AuthUser }>('/auth/session');
+  fetchJson<{ user: AuthUser }>('/auth/session', { redirectOnUnauthorized: false });
 
-export const logout = () => fetchJson<{ message: string }>('/auth/logout', { method: 'POST' });
+export const logout = () =>
+  fetchJson<{ message: string }>('/auth/logout', {
+    method: 'POST',
+    redirectOnUnauthorized: false,
+  });
 
 export const setupAdmin = (data: { username: string; password: string; name: string }) =>
   fetchJson<{ message: string }>('/auth/setup', {

@@ -11,17 +11,18 @@ import dashboardRoutes from './routes/dashboard';
 import reportRoutes from './routes/report';
 import settingsRoutes from './routes/settings';
 import shiftsRoutes from './routes/shifts';
-import authRoutes from './routes/auth';
+import authRoutes, { stopLoginAttemptPruner } from './routes/auth';
 import terminalsRoutes from './routes/terminals';
-import { authenticateToken, requireAdmin, ipWhitelistMiddleware, httpsEnforcementMiddleware } from './middleware/authMiddleware';
+import { authenticateToken, ipWhitelistMiddleware, httpsEnforcementMiddleware } from './middleware/authMiddleware';
 import { createServer } from 'http';
-import { initSocket } from './socket';
-import { initBackupScheduler } from './utils/backup';
-import { initMaintenanceSchedulers } from './utils/maintenance';
+import { closeSocketServer, initSocket } from './socket';
+import { initBackupScheduler, stopBackupScheduler } from './utils/backup';
+import { initMaintenanceSchedulers, stopMaintenanceSchedulers } from './utils/maintenance';
 import { rateLimitMiddleware } from './middleware/rateLimitMiddleware';
 import { ensureKioskTokenSetting } from './utils/ensureKioskToken';
 import { isAllowedOrigin } from './utils/allowedOrigins';
 import { applyAdminPasswordResetFromEnv } from './utils/adminPasswordReset';
+import { getLogLevel, logger } from './utils/logger';
 
 const app = express();
 const httpServer = createServer(app);
@@ -35,17 +36,35 @@ app.use(ipWhitelistMiddleware);
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Request Logger for Production Monitoring
+// Controlled request logging (never logs bodies, cookies, or Authorization)
 app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
     const duration = Date.now() - start;
-    if (res.statusCode >= 400) {
-      console.error(`[${new Date().toISOString()}] ${req.method} ${req.url} ${res.statusCode} - ${duration}ms`);
-    } else {
-      // Quiet logging for success to avoid clutter
-      // console.log(`${req.method} ${req.url} ${res.statusCode} - ${duration}ms`);
+    const pathOnly = (req.originalUrl || req.url || '').split('?')[0];
+    const isHealth = pathOnly === '/api/health' || pathOnly === '/';
+    const meta = {
+      method: req.method,
+      path: pathOnly,
+      status: res.statusCode,
+      durationMs: duration,
+    };
+
+    if (res.statusCode >= 500) {
+      logger.error('request', meta);
+      return;
     }
+    if (res.statusCode >= 400) {
+      logger.warn('request', meta);
+      return;
+    }
+    // Keep health checks quiet at info in production; still visible at debug locally
+    if (isHealth) {
+      logger.debug('request', meta);
+      return;
+    }
+    if (getLogLevel() === 'debug') logger.debug('request', meta);
+    else logger.info('request', meta);
   });
   next();
 });
@@ -68,7 +87,7 @@ app.use(cors({
     if (isAllowedOrigin(origin)) {
       callback(null, true);
     } else {
-      console.warn(`[CORS Blocked] Origin: ${origin}`);
+      logger.warn('cors blocked', { origin: origin || 'none' });
       callback(new Error('CORS: Origin not allowed'));
     }
   },
@@ -76,7 +95,6 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
-// app.use(express.json({ limit: '1mb' })); // Limit payload size for security
 
 // Face-api model weights for mobile kiosk (one-time download from phone)
 app.use('/models', express.static(path.join(__dirname, '../public/models'), {
@@ -119,31 +137,73 @@ app.get('/api/health', (_req, res) => {
 
 // Global Error Handler — MUST be last middleware
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('[Global Error]', err);
-  
+  logger.error('unhandled error', { message: err?.message || 'Unknown error', code: err?.code });
+
   // Don't expose internal error messages to client in production
-  const message = process.env.NODE_ENV === 'production' 
-    ? 'An internal server error occurred' 
+  const message = process.env.NODE_ENV === 'production'
+    ? 'An internal server error occurred'
     : err.message || 'Unknown error';
-    
+
   res.status(err.status || 500).json({
     error: message,
     code: err.code || 'INTERNAL_ERROR'
   });
 });
 
+let shuttingDown = false;
+
+async function gracefulShutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info('shutdown started', { signal });
+
+  stopBackupScheduler();
+  stopMaintenanceSchedulers();
+  stopLoginAttemptPruner();
+
+  try {
+    await closeSocketServer();
+  } catch (err: any) {
+    logger.warn('socket close failed', { message: err?.message });
+  }
+
+  await new Promise<void>((resolve) => {
+    if (!httpServer.listening) {
+      resolve();
+      return;
+    }
+    httpServer.close((err) => {
+      if (err) logger.warn('http close failed', { message: err.message });
+      resolve();
+    });
+  });
+
+  logger.info('shutdown complete', { signal });
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => {
+  void gracefulShutdown('SIGTERM');
+});
+process.on('SIGINT', () => {
+  void gracefulShutdown('SIGINT');
+});
+
 httpServer.listen(Number(PORT), '0.0.0.0', async () => {
-  console.log(`✅ Backend server running on http://localhost:${PORT}`);
-  console.log(`📖 API base: http://localhost:${PORT}/api`);
+  logger.info('backend listening', {
+    port: Number(PORT),
+    apiBase: `http://localhost:${PORT}/api`,
+    logLevel: getLogLevel(),
+  });
   try {
     await ensureKioskTokenSetting();
   } catch (err) {
-    console.error('[Kiosk] Failed to ensure sec_kiosk_token:', err);
+    logger.error('kiosk token ensure failed', { message: (err as Error)?.message });
   }
   try {
     await applyAdminPasswordResetFromEnv();
   } catch (err) {
-    console.error('[AdminReset] Failed:', err);
+    logger.error('admin password reset failed', { message: (err as Error)?.message });
   }
   initBackupScheduler();
   initMaintenanceSchedulers();

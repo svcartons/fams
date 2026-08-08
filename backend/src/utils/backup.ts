@@ -1,6 +1,7 @@
 import prisma from '../db';
 import * as fs from 'fs';
 import * as path from 'path';
+import { logger } from './logger';
 
 const BACKUPS_DIR = path.join(__dirname, '..', '..', 'backups');
 
@@ -80,24 +81,27 @@ export async function runBackup(actor: string = 'System'): Promise<string> {
       for (const file of toDelete) {
         fs.unlinkSync(path.join(BACKUPS_DIR, file.name));
       }
-      console.log(`[Backup Engine] Purged ${toDelete.length} old backup files beyond retention limit.`);
+      logger.info('backup retention applied', { purgedFiles: toDelete.length });
     }
 
     return filename;
   } catch (err: any) {
-    console.error('[Backup Engine Error]', err);
+    logger.error('backup failed', { message: err?.message });
     throw new Error('Backup failed: ' + err.message);
   }
 }
+
+let backupInterval: ReturnType<typeof setInterval> | null = null;
 
 /**
  * Initializes the background backup scheduler on server startup.
  */
 export function initBackupScheduler() {
-  console.log('📦 [Backup Engine] Initializing scheduler...');
+  if (backupInterval) return;
+  logger.info('backup scheduler initialized', { intervalHours: 12 });
 
   // Run a backup check every 12 hours
-  setInterval(async () => {
+  backupInterval = setInterval(async () => {
     try {
       const freqSetting = await prisma.systemSetting.findUnique({ where: { key: 'sys_backup_freq' } });
       const freq = freqSetting?.value || 'daily';
@@ -120,12 +124,19 @@ export function initBackupScheduler() {
       else if (freq === 'weekly' && hoursDiff >= 168) shouldBackup = true;
 
       if (shouldBackup) {
-        console.log('[Backup Engine] Triggering scheduled database backup...');
+        logger.info('scheduled backup started');
         const filename = await runBackup('System Scheduler');
-        console.log(`[Backup Engine] Scheduled backup created: ${filename}`);
+        logger.info('scheduled backup completed', { filename });
       }
-    } catch (err) {
-      console.error('[Backup Engine Scheduler Error]', err);
+    } catch (err: any) {
+      logger.error('backup scheduler failed', { message: err?.message });
     }
   }, 12 * 3600 * 1000); // 12 hours check interval
+}
+
+export function stopBackupScheduler(): void {
+  if (backupInterval) {
+    clearInterval(backupInterval);
+    backupInterval = null;
+  }
 }

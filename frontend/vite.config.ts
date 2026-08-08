@@ -15,6 +15,11 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         runtimeCaching: [
           {
+            // Session and login responses must never be replayed from a service-worker cache.
+            urlPattern: /^\/api\/auth(?:\/|$)/,
+            handler: 'NetworkOnly',
+          },
+          {
             urlPattern: /^\/api\/.*/,
             handler: 'NetworkFirst',
             options: {

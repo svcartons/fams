@@ -5,6 +5,7 @@ import {
   logout as apiLogout,
   setStoredSessionToken,
 } from '../../api/client';
+import { disconnectSocket } from '../utils/socket';
 
 export interface User {
   id: string;
@@ -87,11 +88,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     apiLogout().catch(() => {}).finally(() => {
+      disconnectSocket();
       setUser(null);
       setToken(null);
       setStoredSessionToken(null);
       localStorage.removeItem('fams_user');
-      window.location.assign('/login');
+      window.location.assign('/');
     });
   };
 

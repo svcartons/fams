@@ -8,6 +8,7 @@ import {
 import { getSettingsMap } from './settingsCache';
 import { getTodayWorkDate } from './workDate';
 import { sendWebhookNotification } from './notifications';
+import { logger } from './logger';
 
 const EXPORTS_DIR = path.join(__dirname, '..', '..', 'exports');
 
@@ -137,11 +138,28 @@ export async function enforceBiometricRetention(): Promise<void> {
   });
 }
 
+let maintenanceInterval: ReturnType<typeof setInterval> | null = null;
+
 export function initMaintenanceSchedulers(): void {
-  setInterval(() => {
-    checkMissedPunches().catch(console.error);
-    enforceBiometricRetention().catch(console.error);
+  if (maintenanceInterval) return;
+  maintenanceInterval = setInterval(() => {
+    checkMissedPunches().catch((err: unknown) => {
+      logger.error('missed punch maintenance failed', { message: (err as Error)?.message });
+    });
+    enforceBiometricRetention().catch((err: unknown) => {
+      logger.error('biometric retention maintenance failed', { message: (err as Error)?.message });
+    });
   }, 15 * 60 * 1000);
 
-  console.log('🔧 [Maintenance] Schedulers initialized (missed punch, bio retention)');
+  logger.info('maintenance schedulers initialized', {
+    jobs: ['missed_punch', 'biometric_retention'],
+    intervalMinutes: 15,
+  });
+}
+
+export function stopMaintenanceSchedulers(): void {
+  if (maintenanceInterval) {
+    clearInterval(maintenanceInterval);
+    maintenanceInterval = null;
+  }
 }

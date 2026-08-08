@@ -4,8 +4,26 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import prisma from './db';
 import { isAllowedOrigin } from './utils/allowedOrigins';
+import { logger } from './utils/logger';
 
-let io: SocketIOServer;
+let io: SocketIOServer | null = null;
+
+type RejectCategory =
+  | 'missing_token'
+  | 'invalid_token'
+  | 'user_missing'
+  | 'user_inactive'
+  | 'insufficient_permissions'
+  | 'auth_error';
+
+function rejectAuth(next: (err?: Error) => void, category: RejectCategory, message: string) {
+  logger.warn('socket auth rejected', { category, message });
+  return next(new Error(message));
+}
+
+function activeSocketCount(): number {
+  return io?.of('/').sockets.size ?? 0;
+}
 
 export const initSocket = (server: HttpServer) => {
   io = new SocketIOServer(server, {
@@ -34,7 +52,7 @@ export const initSocket = (server: HttpServer) => {
         .find((part) => part.startsWith('fams_session='))
         ?.slice('fams_session='.length);
       const token = supplied || (cookieToken ? decodeURIComponent(cookieToken) : null);
-      if (!token) return next(new Error('Authentication required'));
+      if (!token) return rejectAuth(next, 'missing_token', 'Authentication required');
 
       const terminal = await prisma.mobileTerminal.findFirst({
         where: {
@@ -46,25 +64,69 @@ export const initSocket = (server: HttpServer) => {
         },
       });
       if (terminal) {
-        socket.data.user = { id: terminal.id, username: terminal.name, role: 'terminal', terminalId: terminal.id };
+        socket.data.user = {
+          id: terminal.id,
+          username: terminal.name,
+          role: 'terminal',
+          terminalId: terminal.id,
+        };
         return next();
       }
 
       const secret = process.env.JWT_SECRET || 'fams-development-only-secret-change-me';
-      const user = jwt.verify(token, secret) as any;
-      if (!['admin', 'hr', 'supervisor'].includes(user.role)) return next(new Error('Insufficient permissions'));
-      socket.data.user = user;
+      let claims: { id?: string; role?: string };
+      try {
+        claims = jwt.verify(token, secret) as { id?: string; role?: string };
+      } catch {
+        return rejectAuth(next, 'invalid_token', 'Invalid or expired session');
+      }
+
+      if (!claims.id) return rejectAuth(next, 'invalid_token', 'Invalid session');
+
+      const user = await prisma.user.findUnique({
+        where: { id: claims.id },
+        select: {
+          id: true,
+          username: true,
+          role: true,
+          worker: { select: { isActive: true } },
+        },
+      });
+
+      if (!user) return rejectAuth(next, 'user_missing', 'Session user not found');
+      if (user.worker && !user.worker.isActive) {
+        return rejectAuth(next, 'user_inactive', 'Session user is no longer active');
+      }
+      if (!['admin', 'hr', 'supervisor'].includes(user.role)) {
+        return rejectAuth(next, 'insufficient_permissions', 'Insufficient permissions');
+      }
+
+      socket.data.user = {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+      };
       next();
     } catch {
-      next(new Error('Invalid or expired session'));
+      return rejectAuth(next, 'auth_error', 'Invalid or expired session');
     }
   });
 
   io.on('connection', (socket) => {
-    console.log(`[Socket] Client connected: ${socket.id} (${socket.data.user?.username ?? 'unknown'})`);
+    logger.info('socket connected', {
+      socketId: socket.id,
+      username: socket.data.user?.username ?? 'unknown',
+      role: socket.data.user?.role ?? 'unknown',
+      activeSockets: activeSocketCount(),
+    });
 
-    socket.on('disconnect', () => {
-      console.log(`[Socket] Client disconnected: ${socket.id}`);
+    socket.on('disconnect', (reason) => {
+      logger.info('socket disconnected', {
+        socketId: socket.id,
+        username: socket.data.user?.username ?? 'unknown',
+        reason,
+        activeSockets: activeSocketCount(),
+      });
     });
   });
 
@@ -77,3 +139,16 @@ export const getIO = () => {
   }
   return io;
 };
+
+/** Stop accepting new connections and close existing sockets. */
+export function closeSocketServer(): Promise<void> {
+  return new Promise((resolve) => {
+    if (!io) {
+      resolve();
+      return;
+    }
+    const server = io;
+    io = null;
+    server.close(() => resolve());
+  });
+}

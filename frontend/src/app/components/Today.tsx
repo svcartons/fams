@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router';
 import { RefreshCw, Download } from 'lucide-react';
-import { io } from 'socket.io-client';
 import {
   getDashboard,
   getLiveStatus,
@@ -13,7 +12,7 @@ import { StatusBadge } from './StatusBadge';
 import { DataTable, type DataTableColumn } from './ui/DataTable';
 import { downloadCsv } from './ui/csv';
 import { PrintButton } from './ui/PrintButton';
-import { getSocketUrl } from '../utils/socketUrl';
+import { connectSocket, subscribeSocket, subscribeSocketConnection } from '../utils/socket';
 import { useAuth } from '../hooks/useAuth';
 
 type DashboardData = Awaited<ReturnType<typeof getDashboard>>;
@@ -131,25 +130,32 @@ export function Today() {
     };
     document.addEventListener('visibilitychange', onVis);
 
-    const socket = io(getSocketUrl(), { path: '/socket.io' });
-    socket.on('connect', () => setConnected(true));
-    socket.on('disconnect', () => setConnected(false));
-    socket.on('worker_scanned', () => {
-      void fetchAll();
-    });
-    socket.on('bulk_sync_complete', () => {
-      void fetchAll();
-    });
-
     return () => {
       cancelled = true;
       if (timeoutId) clearTimeout(timeoutId);
       document.removeEventListener('visibilitychange', onVis);
-      socket.disconnect();
     };
   }, [fetchAll]);
 
-  const { isAdmin } = useAuth();
+  const { isAdmin, isAuthenticated, authReady } = useAuth();
+
+  useEffect(() => {
+    if (!authReady || !isAuthenticated) {
+      setConnected(false);
+      return;
+    }
+
+    const unsubscribeConnection = subscribeSocketConnection(setConnected);
+    const unsubscribeWorkerScanned = subscribeSocket('worker_scanned', () => void fetchAll());
+    const unsubscribeSyncComplete = subscribeSocket('bulk_sync_complete', () => void fetchAll());
+    connectSocket();
+
+    return () => {
+      unsubscribeConnection();
+      unsubscribeWorkerScanned();
+      unsubscribeSyncComplete();
+    };
+  }, [authReady, fetchAll, isAuthenticated]);
 
   const scrollToRoster = () => {
     document.getElementById('workforce-roster')?.scrollIntoView({ behavior: 'smooth', block: 'start' });

@@ -101,9 +101,16 @@ const loginAttempts = new Map<string, { count: number, lockUntil: number }>();
 
 // Prune loginAttempts map every hour to prevent memory leaks
 const intervalKey = 'loginAttemptsInterval';
-if ((global as any)[intervalKey]) {
-  clearInterval((global as any)[intervalKey]);
+
+export function stopLoginAttemptPruner(): void {
+  const interval = (global as any)[intervalKey] as ReturnType<typeof setInterval> | undefined;
+  if (interval) {
+    clearInterval(interval);
+    delete (global as any)[intervalKey];
+  }
 }
+
+stopLoginAttemptPruner();
 (global as any)[intervalKey] = setInterval(() => {
   const now = Date.now();
   for (const [ip, attempt] of loginAttempts.entries()) {
@@ -421,9 +428,13 @@ router.get('/session', authenticateToken, async (req: Request, res: Response) =>
       passwordHash: true,
       authProvider: true,
       mfaEnabled: true,
+      worker: { select: { isActive: true } },
     },
   });
   if (!user) return res.status(401).json({ error: 'Session user not found' });
+  if (user.worker && !user.worker.isActive) {
+    return res.status(401).json({ error: 'Session user is no longer active' });
+  }
   const orgMfa = await isOrgMfaEnabled();
   const privileged = ['admin', 'hr', 'supervisor'].includes(user.role);
   res.json({
