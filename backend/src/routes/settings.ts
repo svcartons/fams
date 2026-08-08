@@ -134,7 +134,7 @@ const DEFAULTS: Record<string, string> = {
   sys_log_level: 'warn',
   sys_compression: 'true',
   sys_rate_limit_window: '15',
-  sys_rate_limit_max: '100',
+  sys_rate_limit_max: '3000',       // SPA-friendly; login has its own stricter bucket
   sys_db_url: '',
 
   // Audit & Compliance

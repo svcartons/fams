@@ -55,9 +55,11 @@ export async function rateLimitMiddleware(req: Request, res: Response, next: Nex
     }
 
     const settings = await getSettingsMap();
-    // Defaults raised for admin UI polling (live + dashboard + corrections ≈ every minute).
+    // Defaults raised for admin UI polling. DB value of 100 was locking the SPA —
+    // enforce a floor so production stays usable even with old settings rows.
     const windowMins = Math.max(1, Number(settings.sys_rate_limit_window || 15) || 15);
-    const maxGlobal = Math.max(100, Number(settings.sys_rate_limit_max || 3000) || 3000);
+    const configuredMax = Number(settings.sys_rate_limit_max || 3000) || 3000;
+    const maxGlobal = Math.max(configuredMax, 2000);
     if (maxGlobal <= 0) return next();
 
     const now = Date.now();
