@@ -23,6 +23,8 @@ export function isAllowedOrigin(origin: string | undefined): boolean {
 
   if (defaults.includes(origin) || fromEnv.includes(origin)) return true;
   if (origin.startsWith('capacitor://')) return true;
+  // Vercel preview + production frontends
+  if (/^https:\/\/([a-z0-9-]+\.)+vercel\.app$/i.test(origin)) return true;
   if (/^(https?|capacitor):\/\/(192\.168\.|172\.|10\.|localhost|127\.0\.0\.1)/.test(origin)) {
     return true;
   }

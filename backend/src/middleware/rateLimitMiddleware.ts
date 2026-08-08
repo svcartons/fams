@@ -12,6 +12,20 @@ export async function rateLimitMiddleware(req: Request, res: Response, next: Nex
       return next();
     }
 
+    // Never rate-limit public auth bootstrap — failed password retries were blocking Google SSO config.
+    const path = (req.path || '').toLowerCase();
+    const url = (req.originalUrl || '').toLowerCase();
+    if (
+      path.includes('/auth/config') ||
+      path.includes('/auth/google-client-id') ||
+      url.includes('/api/auth/config') ||
+      url.includes('/api/auth/google-client-id') ||
+      path === '/health' ||
+      url.includes('/api/health')
+    ) {
+      return next();
+    }
+
     const settings = await getSettingsMap();
     const windowMins = Number(settings.sys_rate_limit_window || 15);
     const maxReqs = Number(settings.sys_rate_limit_max || 100);

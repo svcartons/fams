@@ -85,7 +85,12 @@ export function Login() {
         if (cancelled) return;
         setSiteName(config.siteName);
         setGoogleEnabled(config.googleEnabled);
-        if (!config.googleEnabled || !config.googleClientId) return;
+        if (!config.googleEnabled || !config.googleClientId) {
+          setFormError(
+            'Google SSO is off on the server. Set GOOGLE_CLIENT_ID on Render, then redeploy.'
+          );
+          return;
+        }
         await loadGoogleScript();
         if (cancelled || !window.google?.accounts?.id || !googleBtnRef.current) return;
         window.google.accounts.id.initialize({ client_id: config.googleClientId, callback: (response) => {
@@ -95,8 +100,15 @@ export function Login() {
           type: 'standard', theme: 'outline', size: 'large', text: 'signin_with', shape: 'rectangular',
           width: Math.min(googleBtnRef.current.offsetWidth || 320, 400), logo_alignment: 'left',
         });
-      } catch {
-        if (!cancelled) setFormError('Single sign-on is temporarily unavailable. Use your local account.');
+      } catch (err: any) {
+        if (!cancelled) {
+          const msg = String(err?.message || '');
+          if (msg.toLowerCase().includes('rate limit')) {
+            setFormError('Too many requests. Wait a few minutes, then refresh — Google SSO will come back.');
+          } else {
+            setFormError('Single sign-on is temporarily unavailable. Use your local account, or refresh in a few minutes.');
+          }
+        }
       }
     })();
     return () => { cancelled = true; };
