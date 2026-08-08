@@ -96,30 +96,54 @@ export function Today() {
       setLastUpdatedAt(new Date());
       setError(null);
     } catch (err: any) {
-      setError(err.message ?? 'Failed to load today\'s data');
+      const message = err.message ?? 'Failed to load today\'s data';
+      setError(message);
+      // Stop hammering the API when rate-limited
+      if (String(message).toLowerCase().includes('rate limit') || err.status === 429) {
+        return 'rate-limited' as const;
+      }
     } finally {
       setLoading(false);
     }
+    return 'ok' as const;
   }, []);
 
   useEffect(() => {
-    fetchAll();
-    const interval = setInterval(fetchAll, 60000);
-    const onVis = () => { if (!document.hidden) fetchAll(); };
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let delayMs = 60_000;
+
+    const tick = async () => {
+      if (cancelled) return;
+      const result = await fetchAll();
+      if (cancelled) return;
+      if (result === 'rate-limited') {
+        delayMs = Math.min(delayMs * 2, 5 * 60_000);
+      } else {
+        delayMs = 60_000;
+      }
+      timeoutId = setTimeout(tick, delayMs);
+    };
+
+    void tick();
+    const onVis = () => {
+      if (!document.hidden && !cancelled) void fetchAll();
+    };
     document.addEventListener('visibilitychange', onVis);
 
     const socket = io(getSocketUrl(), { path: '/socket.io' });
     socket.on('connect', () => setConnected(true));
     socket.on('disconnect', () => setConnected(false));
     socket.on('worker_scanned', () => {
-      fetchAll();
+      void fetchAll();
     });
     socket.on('bulk_sync_complete', () => {
-      fetchAll();
+      void fetchAll();
     });
 
     return () => {
-      clearInterval(interval);
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
       document.removeEventListener('visibilitychange', onVis);
       socket.disconnect();
     };

@@ -99,7 +99,7 @@ export const SETTINGS_DEFAULTS: Record<string, string> = {
   sys_log_level: 'warn',
   sys_compression: 'true',
   sys_rate_limit_window: '15',
-  sys_rate_limit_max: '100',
+  sys_rate_limit_max: '3000',
   sys_db_url: '',
   audit_retention_days: '730',
   audit_immutable: 'true',
