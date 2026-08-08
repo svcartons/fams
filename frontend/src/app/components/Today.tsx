@@ -482,6 +482,7 @@ export function Today() {
               action={{ label: 'Refresh', onClick: fetchAll }}
             />
           ) : (
+            <div className="fams-table-scroll overflow-x-auto">
             <table className="fams-table">
               <thead>
                 <tr>
@@ -500,6 +501,7 @@ export function Today() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </DataPanel>
       </div>

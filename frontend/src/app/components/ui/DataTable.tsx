@@ -110,7 +110,7 @@ export function DataTable<T>({
         </div>
       )}
 
-      <div className="overflow-x-auto">
+      <div className="fams-table-scroll overflow-x-auto" tabIndex={0} aria-label="Scrollable data table">
         <table className="fams-table">
           <thead>
             <tr>

@@ -42,10 +42,10 @@ function ProtectedShell() {
 
   return (
     <>
-      <div className="size-full flex flex-col md:flex-row bg-[var(--canvas)] overflow-hidden">
+      <div className="fams-app-shell flex flex-col md:flex-row bg-[var(--canvas)] overflow-hidden">
         <Navigation />
-        <main className="flex-1 min-h-0 min-w-0">
-          <div className="size-full overflow-y-auto pb-16 md:pb-0">
+        <main className="fams-app-main flex-1 min-h-0 min-w-0">
+          <div className="fams-app-scroll size-full overflow-y-auto pb-16 md:pb-0">
             <Outlet />
           </div>
         </main>

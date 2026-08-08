@@ -14,14 +14,14 @@ export function PageShell({ title, description, actions, children, printTitle }:
     <div className="fams-page">
       <PrintHeader title={printTitle ?? title} subtitle={description} />
       <div className="fams-wrap">
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-6 fams-no-print">
+        <header className="fams-page-header flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-6 fams-no-print">
           <div>
             <h1 className="text-xl font-semibold text-[var(--text)] tracking-tight">{title}</h1>
             {description && (
               <p className="text-[13px] text-[var(--muted)] mt-1 max-w-xl leading-relaxed">{description}</p>
             )}
           </div>
-          {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+          {actions && <div className="fams-page-actions flex flex-wrap gap-2">{actions}</div>}
         </header>
         {children}
       </div>
