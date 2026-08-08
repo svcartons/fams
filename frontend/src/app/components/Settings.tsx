@@ -57,6 +57,7 @@ import {
   type PayrollExportRecord,
 } from "../../api/client";
 import { useAuth } from "../hooks/useAuth";
+import { PwaInstallButton } from "./PwaInstallButton";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -2841,7 +2842,8 @@ function TerminalsSection() {
             </li>
           </ol>
 
-          <div className="flex flex-wrap gap-2 pt-1">
+          <div className="flex flex-wrap gap-2 pt-1 items-center">
+            <PwaInstallButton variant="settings" />
             <button
               type="button"
               onClick={copyKioskUrl}

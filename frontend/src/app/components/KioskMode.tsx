@@ -32,6 +32,7 @@ import {
   removeQueuedByClientEventIds,
 } from '../utils/kioskOfflineQueue';
 import { assessFaceQuality } from '../utils/faceQuality';
+import { PwaInstallButton } from './PwaInstallButton';
 
 const cameraConstraints: Record<string, MediaTrackConstraints> = {
   '480p': { width: { ideal: 640 }, height: { ideal: 480 } },
@@ -858,6 +859,8 @@ export function KioskMode() {
             Install this page to the home screen for a full-screen scanner. On factory
             Wi‑Fi it unlocks automatically; off-site, an admin unlocks once with Google.
           </p>
+
+          <PwaInstallButton variant="kiosk" />
 
           {googleConfigError && (
             <div className="fams-alert fams-alert-warning mb-4 text-left" role="status">
