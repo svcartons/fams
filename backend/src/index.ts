@@ -21,6 +21,7 @@ import { initMaintenanceSchedulers } from './utils/maintenance';
 import { rateLimitMiddleware } from './middleware/rateLimitMiddleware';
 import { ensureKioskTokenSetting } from './utils/ensureKioskToken';
 import { isAllowedOrigin } from './utils/allowedOrigins';
+import { applyAdminPasswordResetFromEnv } from './utils/adminPasswordReset';
 
 const app = express();
 const httpServer = createServer(app);
@@ -138,6 +139,11 @@ httpServer.listen(Number(PORT), '0.0.0.0', async () => {
     await ensureKioskTokenSetting();
   } catch (err) {
     console.error('[Kiosk] Failed to ensure sec_kiosk_token:', err);
+  }
+  try {
+    await applyAdminPasswordResetFromEnv();
+  } catch (err) {
+    console.error('[AdminReset] Failed:', err);
   }
   initBackupScheduler();
   initMaintenanceSchedulers();
